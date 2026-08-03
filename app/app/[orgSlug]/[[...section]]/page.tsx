@@ -23,5 +23,5 @@ export default async function OfficePage({ params }: { params: Promise<{ orgSlug
   // EN: Render one module inside the shared tenant workspace route.
   // RU: Отображает один модуль внутри общей tenant-route рабочего пространства.
   const resolvedParams = await params;
-  return <FlowDeskApp section={resolveSection(resolvedParams.section?.[0])} />;
+  return <FlowDeskApp orgSlug={resolvedParams.orgSlug} section={resolveSection(resolvedParams.section?.[0])} />;
 }

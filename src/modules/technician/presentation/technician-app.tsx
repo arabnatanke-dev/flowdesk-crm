@@ -24,7 +24,7 @@ import { LanguageSwitch } from "@/src/shared/ui/language-switch";
 
 type TechnicianState = "DISPATCHED" | "EN_ROUTE" | "ON_SITE" | "IN_PROGRESS" | "WORK_COMPLETED";
 
-export function TechnicianApp() {
+export function TechnicianApp({ orgSlug }: { orgSlug: string }) {
   // EN: Render the mobile-first technician flow with explicit server-confirmed states.
   // RU: Отображает mobile-first сценарий мастера с явными подтверждёнными статусами.
   const { locale, messages: t } = useLocale();
@@ -61,7 +61,7 @@ export function TechnicianApp() {
   return (
     <main className="technician-app">
       <header className="technician-header">
-        <Link className="brand-lockup" href="/m/horizon"><span className="brand-mark"><span /><span /><span /></span><strong>FlowDesk</strong></Link>
+        <Link className="brand-lockup" href={`/m/${orgSlug}`}><span className="brand-mark"><span /><span /><span /></span><strong>FlowDesk</strong></Link>
         <div><LanguageSwitch compact /><button className="icon-button notification-button" type="button"><Bell size={19} /><span /></button></div>
       </header>
 
@@ -100,7 +100,7 @@ export function TechnicianApp() {
       </section>
 
       <nav className="technician-bottom-nav" aria-label="Technician navigation">
-        <Link className="is-active" href="/m/horizon"><ClipboardCheck size={20} /><span>{t.today}</span></Link>
+        <Link className="is-active" href={`/m/${orgSlug}`}><ClipboardCheck size={20} /><span>{t.today}</span></Link>
         <a href="#jobs"><Wrench size={20} /><span>{t.mobileJobs}</span></a>
         <a href="#notifications"><Bell size={20} /><span>{t.notifications}</span></a>
         <a href="#profile"><UserRound size={20} /><span>{t.profile}</span></a>

@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useLocale } from "@/src/shared/i18n/locale-context";
 import { useWorkOrders } from "../application/work-order-store";
 import { getAvailableTransitions } from "../domain/state-machine";
@@ -30,10 +31,16 @@ export function WorkOrdersView({ onOpenCreate }: WorkOrdersViewProps) {
   // RU: Показывает реестр заявок с поиском, безопасными переходами и адаптивным списком.
   const { locale, messages: t } = useLocale();
   const { workOrders, transitionWorkOrder } = useWorkOrders();
+  const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<WorkOrderStatus | "ALL">("ALL");
   const [view, setView] = useState<"list" | "kanban" | "map">("list");
-  const [selected, setSelected] = useState<WorkOrder | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(() => searchParams.get("selected"));
+  const selected = useMemo(() => {
+    // EN: Resolve deep-linked selection from the latest tenant-scoped work-order snapshot.
+    // RU: Находит заявку из deep-link в актуальном tenant-снимке реестра.
+    return workOrders.find((workOrder) => workOrder.id === selectedId) ?? null;
+  }, [selectedId, workOrders]);
 
   const filteredWorkOrders = useMemo(() => {
     // EN: Keep filtering deterministic and scoped to the current tenant snapshot.
@@ -50,7 +57,6 @@ export function WorkOrdersView({ onOpenCreate }: WorkOrdersViewProps) {
     // EN: Execute the selected domain command through the module application API.
     // RU: Выполняет выбранную доменную команду через прикладной API модуля.
     transitionWorkOrder(order.id, nextStatus);
-    setSelected({ ...order, status: nextStatus, version: order.version + 1 });
   }
 
   function clearFilters() {
@@ -122,7 +128,7 @@ export function WorkOrdersView({ onOpenCreate }: WorkOrdersViewProps) {
               </thead>
               <tbody>
                 {filteredWorkOrders.map((order) => (
-                  <tr key={order.id} onClick={() => setSelected(order)}>
+                  <tr key={order.id} onClick={() => setSelectedId(order.id)}>
                     <td onClick={(event) => event.stopPropagation()}><input type="checkbox" aria-label={`${t.selected} ${order.number}`} /></td>
                     <td><strong className="order-number">{order.number}</strong><small>v{order.version}</small></td>
                     <td><strong>{order.client}</strong><small>{order.phone}</small></td>
@@ -141,7 +147,7 @@ export function WorkOrdersView({ onOpenCreate }: WorkOrdersViewProps) {
 
           <div className="mobile-record-list">
             {filteredWorkOrders.map((order) => (
-              <button className="mobile-record-card" type="button" key={order.id} onClick={() => setSelected(order)}>
+              <button className="mobile-record-card" type="button" key={order.id} onClick={() => setSelectedId(order.id)}>
                 <span className="record-card-top"><strong>{order.number}</strong><span className={`status-badge status-${getStatusTone(order.status)}`}>{getStatusLabel(order.status, locale)}</span></span>
                 <strong>{localizeText(order.title, locale)}</strong>
                 <span>{order.client} · {order.appointment ?? t.unscheduledQueue}</span>
@@ -163,11 +169,11 @@ export function WorkOrdersView({ onOpenCreate }: WorkOrdersViewProps) {
 
       {selected && (
         <aside className="detail-drawer" aria-label={`${t.workOrders} ${selected.number}`}>
-          <button className="drawer-backdrop" type="button" onClick={() => setSelected(null)} aria-label={t.close} />
+          <button className="drawer-backdrop" type="button" onClick={() => setSelectedId(null)} aria-label={t.close} />
           <div className="drawer-panel">
             <div className="drawer-heading">
               <div><span className="eyebrow">{selected.number} · v{selected.version}</span><h2>{localizeText(selected.title, locale)}</h2></div>
-              <button className="icon-button" type="button" onClick={() => setSelected(null)} aria-label={t.close}><X size={19} /></button>
+              <button className="icon-button" type="button" onClick={() => setSelectedId(null)} aria-label={t.close}><X size={19} /></button>
             </div>
             <div className="drawer-client"><strong>{selected.client}</strong><span>{selected.phone}</span><small>{localizeText(selected.address, locale)}</small></div>
             <dl className="detail-grid">

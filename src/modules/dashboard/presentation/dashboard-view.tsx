@@ -21,10 +21,11 @@ import { getStatusLabel, getStatusTone } from "@/src/modules/work-orders/present
 import { localizeText } from "@/src/modules/work-orders/domain/work-order";
 
 type DashboardViewProps = {
+  orgSlug: string;
   onOpenCreate: () => void;
 };
 
-export function DashboardView({ onOpenCreate }: DashboardViewProps) {
+export function DashboardView({ orgSlug, onOpenCreate }: DashboardViewProps) {
   // EN: Build a role-oriented operational dashboard from the current work-order snapshot.
   // RU: Формирует роль-ориентированный дашборд из текущего снимка заявок.
   const { locale, messages: t } = useLocale();
@@ -65,7 +66,7 @@ export function DashboardView({ onOpenCreate }: DashboardViewProps) {
 
       <section className="metric-grid" aria-label="Operational metrics">
         {metrics.map(({ label, value, note, icon: Icon, tone }) => (
-          <Link className={`metric-card metric-${tone}`} href="/app/horizon/work-orders" key={label}>
+          <Link className={`metric-card metric-${tone}`} href={`/app/${orgSlug}/work-orders`} key={label}>
             <div className="metric-topline">
               <span className="metric-icon"><Icon size={18} /></span>
               <ArrowUpRight size={16} className="metric-arrow" />
@@ -84,11 +85,11 @@ export function DashboardView({ onOpenCreate }: DashboardViewProps) {
               <span className="panel-kicker">LIVE QUEUE</span>
               <h2>{t.requiresAttention}</h2>
             </div>
-            <Link href="/app/horizon/work-orders">{t.viewAll}<ArrowUpRight size={15} /></Link>
+            <Link href={`/app/${orgSlug}/work-orders`}>{t.viewAll}<ArrowUpRight size={15} /></Link>
           </div>
           <div className="attention-list">
             {workOrders.slice(0, 4).map((order) => (
-              <Link className="attention-row" href={`/app/horizon/work-orders?selected=${order.id}`} key={order.id}>
+              <Link className="attention-row" href={`/app/${orgSlug}/work-orders?selected=${order.id}`} key={order.id}>
                 <span className={`priority-dot priority-${order.priority.toLowerCase()}`} aria-label={order.priority} />
                 <span className="attention-main">
                   <strong>{order.number} · {localizeText(order.title, locale)}</strong>
@@ -111,7 +112,7 @@ export function DashboardView({ onOpenCreate }: DashboardViewProps) {
               <span className="panel-kicker">SCHEDULE</span>
               <h2>{t.nextVisits}</h2>
             </div>
-            <Link href="/app/horizon/dispatch">{t.schedule}<ArrowUpRight size={15} /></Link>
+            <Link href={`/app/${orgSlug}/dispatch`}>{t.schedule}<ArrowUpRight size={15} /></Link>
           </div>
           <div className="timeline-list">
             {appointments.map((order, index) => (

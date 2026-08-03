@@ -3,6 +3,7 @@
 import {
   createContext,
   useContext,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -17,7 +18,7 @@ import {
 type WorkOrderStoreValue = {
   workOrders: WorkOrder[];
   createWorkOrder: (input: NewWorkOrderInput) => WorkOrder;
-  transitionWorkOrder: (id: string, to: WorkOrderStatus) => boolean;
+  transitionWorkOrder: (id: string, to: WorkOrderStatus) => void;
 };
 
 const WorkOrderStore = createContext<WorkOrderStoreValue | null>(null);
@@ -26,14 +27,16 @@ export function WorkOrderProvider({ children }: { children: ReactNode }) {
   // EN: Own the demo aggregate state behind a module-level application boundary.
   // RU: Хранит демонстрационное состояние агрегата за границей прикладного модуля.
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>(initialWorkOrders);
+  const nextSequence = useRef(1049);
 
   function createWorkOrder(input: NewWorkOrderInput): WorkOrder {
     // EN: Create a normalized NEW aggregate with an independent optimistic version.
     // RU: Создаёт нормализованный агрегат NEW с отдельной оптимистической версией.
-    const nextSequence = 1049 + (workOrders.length - initialWorkOrders.length);
+    const allocatedSequence = nextSequence.current;
+    nextSequence.current += 1;
     const created: WorkOrder = {
-      id: `wo-${nextSequence}`,
-      number: `WO-${nextSequence}`,
+      id: `wo-${allocatedSequence}`,
+      number: `WO-${allocatedSequence}`,
       client: input.client.trim(),
       phone: input.phone.trim(),
       title: { ru: input.title.trim(), en: input.title.trim() },
@@ -50,20 +53,17 @@ export function WorkOrderProvider({ children }: { children: ReactNode }) {
     return created;
   }
 
-  function transitionWorkOrder(id: string, to: WorkOrderStatus): boolean {
+  function transitionWorkOrder(id: string, to: WorkOrderStatus): void {
     // EN: Apply a domain-approved transition and bump the aggregate version.
     // RU: Применяет разрешённый доменом переход и увеличивает версию агрегата.
-    let changed = false;
     setWorkOrders((current) =>
       current.map((workOrder) => {
         if (workOrder.id !== id || !canTransition(workOrder.status, to)) {
           return workOrder;
         }
-        changed = true;
         return { ...workOrder, status: to, version: workOrder.version + 1 };
       }),
     );
-    return changed;
   }
 
   const value = { workOrders, createWorkOrder, transitionWorkOrder };

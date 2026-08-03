@@ -1,7 +1,8 @@
 import { TechnicianApp } from "@/src/modules/technician/presentation/technician-app";
 
-export default function TechnicianPage() {
+export default async function TechnicianPage({ params }: { params: Promise<{ orgSlug: string }> }) {
   // EN: Serve the dedicated mobile-first technician workspace.
   // RU: Отдаёт отдельное mobile-first рабочее пространство мастера.
-  return <TechnicianApp />;
+  const { orgSlug } = await params;
+  return <TechnicianApp orgSlug={orgSlug} />;
 }

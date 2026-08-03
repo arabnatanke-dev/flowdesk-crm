@@ -28,7 +28,11 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
     // RU: Восстанавливает последний явно выбранный язык после гидратации.
     const storedLocale = window.localStorage.getItem("flowdesk.locale");
     if (storedLocale === "ru" || storedLocale === "en") {
-      const restoreTimer = window.setTimeout(() => setLocaleState(storedLocale), 0);
+      const restoreTimer = window.setTimeout(() => {
+        setLocaleState(storedLocale);
+        document.documentElement.lang = storedLocale;
+        document.documentElement.dir = "ltr";
+      }, 0);
       return () => window.clearTimeout(restoreTimer);
     }
   }, []);

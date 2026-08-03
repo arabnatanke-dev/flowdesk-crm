@@ -34,10 +34,11 @@ import type { NewWorkOrderInput, WorkOrderPriority } from "@/src/modules/work-or
 export type OfficeSection = "dashboard" | "work-orders" | "dispatch" | "clients" | "team" | "catalog" | "finance" | "reports" | "settings";
 
 type FlowDeskShellProps = {
+  orgSlug: string;
   section: OfficeSection;
 };
 
-export function FlowDeskShell({ section }: FlowDeskShellProps) {
+export function FlowDeskShell({ orgSlug, section }: FlowDeskShellProps) {
   // EN: Compose the role-aware office shell around independently bounded module views.
   // RU: Собирает роль-ориентированную office-оболочку вокруг независимых модулей.
   const { locale, messages: t } = useLocale();
@@ -49,14 +50,14 @@ export function FlowDeskShell({ section }: FlowDeskShellProps) {
   const [toast, setToast] = useState("");
 
   const navigation = [
-    { key: "dashboard" as const, label: t.dashboard, href: "/app/horizon/dashboard", icon: LayoutDashboard },
-    { key: "work-orders" as const, label: t.workOrders, href: "/app/horizon/work-orders", icon: BriefcaseBusiness, badge: workOrders.filter((order) => order.status === "NEW").length },
-    { key: "dispatch" as const, label: t.dispatch, href: "/app/horizon/dispatch", icon: CalendarDays },
-    { key: "clients" as const, label: t.clients, href: "/app/horizon/clients", icon: UsersRound },
-    { key: "team" as const, label: t.team, href: "/app/horizon/team", icon: Wrench },
-    { key: "catalog" as const, label: t.catalog, href: "/app/horizon/catalog", icon: Package },
-    { key: "finance" as const, label: t.finance, href: "/app/horizon/finance", icon: WalletCards },
-    { key: "reports" as const, label: t.reports, href: "/app/horizon/reports", icon: FileBarChart },
+    { key: "dashboard" as const, label: t.dashboard, href: `/app/${orgSlug}/dashboard`, icon: LayoutDashboard },
+    { key: "work-orders" as const, label: t.workOrders, href: `/app/${orgSlug}/work-orders`, icon: BriefcaseBusiness, badge: workOrders.filter((order) => order.status === "NEW").length },
+    { key: "dispatch" as const, label: t.dispatch, href: `/app/${orgSlug}/dispatch`, icon: CalendarDays },
+    { key: "clients" as const, label: t.clients, href: `/app/${orgSlug}/clients`, icon: UsersRound },
+    { key: "team" as const, label: t.team, href: `/app/${orgSlug}/team`, icon: Wrench },
+    { key: "catalog" as const, label: t.catalog, href: `/app/${orgSlug}/catalog`, icon: Package },
+    { key: "finance" as const, label: t.finance, href: `/app/${orgSlug}/finance`, icon: WalletCards },
+    { key: "reports" as const, label: t.reports, href: `/app/${orgSlug}/reports`, icon: FileBarChart },
   ];
 
   useEffect(() => {
@@ -104,7 +105,7 @@ export function FlowDeskShell({ section }: FlowDeskShellProps) {
       <a className="skip-link" href="#main-content">Skip to content</a>
       <aside className={`app-sidebar ${mobileMenuOpen ? "is-open" : ""}`}>
         <div className="sidebar-brand-row">
-          <Link className="brand-lockup" href="/app/horizon/dashboard" aria-label="FlowDesk CRM">
+          <Link className="brand-lockup" href={`/app/${orgSlug}/dashboard`} aria-label="FlowDesk CRM">
             <span className="brand-mark" aria-hidden="true"><span /><span /><span /></span>
             <strong>FlowDesk</strong>
           </Link>
@@ -127,7 +128,7 @@ export function FlowDeskShell({ section }: FlowDeskShellProps) {
         </nav>
 
         <nav className="sidebar-nav sidebar-nav-bottom" aria-label="Secondary">
-          <Link className={section === "settings" ? "is-active" : ""} href="/app/horizon/settings"><Settings size={19} strokeWidth={1.8} /><span>{t.settings}</span></Link>
+          <Link className={section === "settings" ? "is-active" : ""} href={`/app/${orgSlug}/settings`}><Settings size={19} strokeWidth={1.8} /><span>{t.settings}</span></Link>
           <a href="#help"><BookOpen size={19} strokeWidth={1.8} /><span>{t.help}</span></a>
         </nav>
 
@@ -155,7 +156,7 @@ export function FlowDeskShell({ section }: FlowDeskShellProps) {
         </header>
 
         <main id="main-content" className="app-content">
-          <CurrentSection section={section} onOpenCreate={openCreateDrawer} />
+          <CurrentSection orgSlug={orgSlug} section={section} onOpenCreate={openCreateDrawer} />
         </main>
       </div>
 
@@ -168,7 +169,7 @@ export function FlowDeskShell({ section }: FlowDeskShellProps) {
             <label><Search size={20} /><input autoFocus value={commandQuery} onChange={(event) => setCommandQuery(event.target.value)} placeholder={t.searchHint} /><kbd>ESC</kbd></label>
             <div className="command-results">
               <span className="command-group-label">{t.workOrders}</span>
-              {searchResults.map((order) => <Link href={`/app/horizon/work-orders?selected=${order.id}`} key={order.id}><span className="command-result-icon"><BriefcaseBusiness size={17} /></span><span><strong>{order.number} · {order.client}</strong><small>{order.title[locale]}</small></span><span className="command-open"><Command size={13} /> ↵</span></Link>)}
+              {searchResults.map((order) => <Link href={`/app/${orgSlug}/work-orders?selected=${order.id}`} key={order.id}><span className="command-result-icon"><BriefcaseBusiness size={17} /></span><span><strong>{order.number} · {order.client}</strong><small>{order.title[locale]}</small></span><span className="command-open"><Command size={13} /> ↵</span></Link>)}
               <span className="command-group-label">{locale === "ru" ? "Быстрые действия" : "Quick actions"}</span>
               <button type="button" onClick={() => { setSearchOpen(false); openCreateDrawer(); }}><span className="command-result-icon"><Plus size={17} /></span><span><strong>{t.newWorkOrder}</strong><small>{locale === "ru" ? "Создать новый операционный aggregate" : "Create a new operational aggregate"}</small></span></button>
             </div>
@@ -181,7 +182,7 @@ export function FlowDeskShell({ section }: FlowDeskShellProps) {
   );
 }
 
-function CurrentSection({ section, onOpenCreate }: { section: OfficeSection; onOpenCreate: () => void }) {
+function CurrentSection({ orgSlug, section, onOpenCreate }: { orgSlug: string; section: OfficeSection; onOpenCreate: () => void }) {
   // EN: Route the office shell to one bounded presentation module.
   // RU: Направляет office-оболочку к одному ограниченному presentation-модулю.
   switch (section) {
@@ -193,7 +194,7 @@ function CurrentSection({ section, onOpenCreate }: { section: OfficeSection; onO
     case "finance": return <FinanceView />;
     case "reports": return <ReportsView />;
     case "settings": return <SettingsView />;
-    default: return <DashboardView onOpenCreate={onOpenCreate} />;
+    default: return <DashboardView orgSlug={orgSlug} onOpenCreate={onOpenCreate} />;
   }
 }
 
