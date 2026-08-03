@@ -32,16 +32,16 @@ export function DispatchView({ onOpenCreate }: DispatchViewProps) {
           <p>{t.dispatchHint}</p>
         </div>
         <div className="page-actions">
-          <button className="secondary-button" type="button"><SlidersHorizontal size={17} />{t.filter}</button>
+          <button className="secondary-button" type="button" disabled><SlidersHorizontal size={17} />{t.filter}</button>
           <button className="primary-button" type="button" onClick={onOpenCreate}><Plus size={18} />{t.newWorkOrder}</button>
         </div>
       </header>
 
       <section className="dispatch-toolbar panel">
         <div className="date-navigation">
-          <button className="icon-button" type="button" aria-label="Previous day"><ChevronLeft size={18} /></button>
-          <button type="button" className="date-button"><CalendarDays size={17} /><strong>03 Aug 2026</strong><span>{t.today}</span></button>
-          <button className="icon-button" type="button" aria-label="Next day"><ChevronRight size={18} /></button>
+          <button className="icon-button" type="button" aria-label="Previous day" disabled><ChevronLeft size={18} /></button>
+          <button type="button" className="date-button" disabled><CalendarDays size={17} /><strong>03 Aug 2026</strong><span>{t.today}</span></button>
+          <button className="icon-button" type="button" aria-label="Next day" disabled><ChevronRight size={18} /></button>
         </div>
         <div className="dispatch-summary"><span><UsersRound size={16} />3 {t.technicians}</span><span><Clock3 size={16} />7 {t.jobsToday}</span><span className="warning-text"><AlertTriangle size={16} />1 {t.conflict}</span></div>
       </section>

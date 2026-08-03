@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { useLocale } from "@/src/shared/i18n/locale-context";
+import type { OrganizationSettings } from "@/src/server/settings/service";
 
 const clients = [
   { name: "Layla Hassan", phone: "+971 50 441 2048", location: "Dubai Marina", jobs: 8, value: "AED 6,240", last: "03 Aug" },
@@ -72,10 +73,10 @@ export function ClientsView() {
         <MiniMetric icon={Star} label="CSAT" value="4.8 / 5" note="146 reviews" />
       </section>
       <section className="panel data-panel">
-        <div className="module-toolbar"><label className="toolbar-search"><Search size={17} /><input placeholder={t.searchHint} /></label><button className="secondary-button" type="button"><Download size={16} />{t.export}</button></div>
+        <div className="module-toolbar"><label className="toolbar-search"><Search size={17} /><input placeholder={t.searchHint} /></label><button className="secondary-button" type="button" disabled><Download size={16} />{t.export}</button></div>
         <div className="desktop-table-wrap">
           <table className="data-table"><thead><tr><th>{t.client}</th><th>{t.phone}</th><th>{locale === "ru" ? "Район" : "Area"}</th><th>{t.workOrders}</th><th>{t.lifetimeValue}</th><th>{locale === "ru" ? "Последняя заявка" : "Last job"}</th><th /></tr></thead>
-            <tbody>{clients.map((client) => <tr key={client.phone}><td><span className="entity-cell"><span className="avatar avatar-soft">{client.name.split(" ").map((part) => part[0]).join("").slice(0, 2)}</span><strong>{client.name}</strong></span></td><td>{client.phone}</td><td><MapPin size={14} /> {client.location}</td><td>{client.jobs}</td><td className="money-cell">{client.value}</td><td>{client.last}</td><td><button className="table-action" type="button"><ChevronRight size={18} /></button></td></tr>)}</tbody>
+            <tbody>{clients.map((client) => <tr key={client.phone}><td><span className="entity-cell"><span className="avatar avatar-soft">{client.name.split(" ").map((part) => part[0]).join("").slice(0, 2)}</span><strong>{client.name}</strong></span></td><td>{client.phone}</td><td><MapPin size={14} /> {client.location}</td><td>{client.jobs}</td><td className="money-cell">{client.value}</td><td>{client.last}</td><td><button className="table-action" type="button" disabled><ChevronRight size={18} /></button></td></tr>)}</tbody>
           </table>
         </div>
       </section>
@@ -97,7 +98,7 @@ export function TeamView() {
           <div className="skill-list">{member.skills.map((skill) => <span key={skill}>{skill}</span>)}</div>
           <div className="load-line"><span><strong>{member.load}%</strong> {locale === "ru" ? "загрузка" : "utilization"}</span><span>{member.jobs} {t.jobsToday}</span></div>
           <div className="progress-track"><span style={{ width: `${member.load}%` }} /></div>
-          <button type="button">{locale === "ru" ? "Открыть профиль" : "View profile"}<ArrowRight size={15} /></button>
+          <button type="button" disabled>{locale === "ru" ? "Открыть профиль" : "View profile"}<ArrowRight size={15} /></button>
         </article>)}
       </section>
     </div>
@@ -118,9 +119,9 @@ export function CatalogView() {
         <MiniMetric icon={Percent} label="VAT" value="5%" note="UAE seed" />
       </section>
       <section className="panel data-panel">
-        <div className="module-toolbar"><label className="toolbar-search"><Search size={17} /><input placeholder={locale === "ru" ? "Поиск услуги, SKU или категории…" : "Search service, SKU or category…"} /></label><button className="secondary-button" type="button"><Download size={16} />{t.export}</button></div>
+        <div className="module-toolbar"><label className="toolbar-search"><Search size={17} /><input placeholder={locale === "ru" ? "Поиск услуги, SKU или категории…" : "Search service, SKU or category…"} /></label><button className="secondary-button" type="button" disabled><Download size={16} />{t.export}</button></div>
         <div className="desktop-table-wrap"><table className="data-table"><thead><tr><th>SKU</th><th>{locale === "ru" ? "Услуга" : "Service"}</th><th>{locale === "ru" ? "Категория" : "Category"}</th><th>{locale === "ru" ? "Длительность" : "Duration"}</th><th>{locale === "ru" ? "Базовая цена" : "Base price"}</th><th>{t.status}</th><th /></tr></thead><tbody>
-          {services.map((service) => <tr key={service.code}><td><code>{service.code}</code></td><td><strong>{locale === "ru" ? service.nameRu : service.nameEn}</strong></td><td>{service.category}</td><td>{service.duration}</td><td className="money-cell">{service.price}</td><td><span className="status-badge status-success">{locale === "ru" ? "Активна" : "Active"}</span></td><td><button className="table-action" type="button"><ChevronRight size={18} /></button></td></tr>)}
+          {services.map((service) => <tr key={service.code}><td><code>{service.code}</code></td><td><strong>{locale === "ru" ? service.nameRu : service.nameEn}</strong></td><td>{service.category}</td><td>{service.duration}</td><td className="money-cell">{service.price}</td><td><span className="status-badge status-success">{locale === "ru" ? "Активна" : "Active"}</span></td><td><button className="table-action" type="button" disabled><ChevronRight size={18} /></button></td></tr>)}
         </tbody></table></div>
       </section>
     </div>
@@ -163,42 +164,70 @@ export function ReportsView() {
   ];
   return (
     <div className="view-stack"><ViewHeading eyebrow="ANALYTICS · LIVE DEFINITIONS" title={t.reportsTitle} subtitle={t.reportsSubtitle} action={t.export} />
-      <section className="report-card-grid">{reportCards.map(({ icon: Icon, title, body, accent }) => <article className="report-card panel" key={title}><span className={`report-icon report-${accent}`}><Icon size={23} /></span><div><h2>{title}</h2><p>{body}</p></div><button type="button">{t.open}<ArrowRight size={16} /></button></article>)}</section>
+      <section className="report-card-grid">{reportCards.map(({ icon: Icon, title, body, accent }) => <article className="report-card panel" key={title}><span className={`report-icon report-${accent}`}><Icon size={23} /></span><div><h2>{title}</h2><p>{body}</p></div><button type="button" disabled>{t.open}<ArrowRight size={16} /></button></article>)}</section>
       <section className="panel report-highlight"><div><span className="panel-kicker">METRIC DICTIONARY</span><h2>{locale === "ru" ? "Одна формула — один результат" : "One formula, one reproducible result"}</h2><p>{locale === "ru" ? "Каждый показатель связан с определением, фильтрами, временной зоной и исходными записями." : "Every metric is tied to its definition, filters, timezone and source records."}</p></div><div className="report-score"><strong>94.2%</strong><span>SLA compliance</span><small>1,104 eligible work orders</small></div></section>
     </div>
   );
 }
 
-export function SettingsView() {
+export function SettingsView({ orgSlug, initialSettings }: { orgSlug: string; initialSettings: OrganizationSettings }) {
   // EN: Edit tenant-level locale, timezone, currency and tax defaults in one bounded form.
   // RU: Редактирует locale, timezone, currency и налоговые defaults tenant в одной форме.
   const { locale, setLocale, messages: t } = useLocale();
+  const [settings, setSettings] = useState(initialSettings);
   const [saved, setSaved] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
-  function handleSave(event: FormEvent<HTMLFormElement>) {
-    // EN: Confirm the settings command without optimistic financial side effects.
-    // RU: Подтверждает команду настроек без оптимистичных финансовых эффектов.
+  async function handleSave(event: FormEvent<HTMLFormElement>) {
+    // EN: Persist tenant settings and accept the next version only after server confirmation.
+    // RU: Сохраняет tenant-настройки и принимает новую версию только после подтверждения сервера.
     event.preventDefault();
-    setSaved(true);
-    window.setTimeout(() => setSaved(false), 2600);
+    const form = new FormData(event.currentTarget);
+    setPending(true);
+    setErrorMessage("");
+    try {
+      const response = await fetch(`/api/organizations/${encodeURIComponent(orgSlug)}/settings`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: String(form.get("name") ?? ""),
+          defaultLocale: String(form.get("defaultLocale") ?? "en"),
+          timezone: String(form.get("timezone") ?? "Asia/Dubai"),
+          currency: String(form.get("currency") ?? "AED"),
+          taxRateBps: Number(form.get("taxRateBps") ?? 0),
+          expectedVersion: settings.version,
+        }),
+      });
+      const payload = await response.json() as { settings?: OrganizationSettings; error?: { message?: string } };
+      if (!response.ok || !payload.settings) throw new Error(payload.error?.message ?? "Settings command failed.");
+      setSettings(payload.settings);
+      setLocale(payload.settings.defaultLocale);
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 2600);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Settings command failed.");
+    } finally {
+      setPending(false);
+    }
   }
 
   return (
-    <div className="view-stack"><ViewHeading eyebrow="TENANT SETTINGS · v12" title={t.settingsTitle} subtitle={t.settingsSubtitle} />
+    <div className="view-stack"><ViewHeading eyebrow={`TENANT SETTINGS · v${settings.version}`} title={t.settingsTitle} subtitle={t.settingsSubtitle} />
       <form className="settings-layout" onSubmit={handleSave}>
-        <nav className="settings-nav panel" aria-label={t.settings}><button type="button" className="is-active"><Building2 size={17} />{locale === "ru" ? "Профиль" : "Profile"}</button><button type="button"><Clock3 size={17} />{locale === "ru" ? "Время и график" : "Time & schedule"}</button><button type="button"><Percent size={17} />{locale === "ru" ? "Налоги" : "Taxes"}</button><button type="button"><Settings2 size={17} />SLA & workflow</button><button type="button"><ShieldCheck size={17} />{locale === "ru" ? "Безопасность" : "Security"}</button></nav>
+        <nav className="settings-nav panel" aria-label={t.settings}><button type="button" className="is-active" disabled><Building2 size={17} />{locale === "ru" ? "Профиль" : "Profile"}</button><button type="button" disabled><Clock3 size={17} />{locale === "ru" ? "Время и график" : "Time & schedule"}</button><button type="button" disabled><Percent size={17} />{locale === "ru" ? "Налоги" : "Taxes"}</button><button type="button" disabled><Settings2 size={17} />SLA & workflow</button><button type="button" disabled><ShieldCheck size={17} />{locale === "ru" ? "Безопасность" : "Security"}</button></nav>
         <section className="settings-form panel">
           <div className="panel-heading"><div><span className="panel-kicker">ORGANIZATION</span><h2>{locale === "ru" ? "Основные настройки" : "General settings"}</h2></div>{saved && <span className="saved-pill"><CheckCircle2 size={15} />{t.saved}</span>}</div>
           <div className="form-grid two-columns">
-            <label className="field-label"><span>{locale === "ru" ? "Название организации" : "Organization name"}</span><input defaultValue="Horizon Service Co." /></label>
-            <label className="field-label"><span>{locale === "ru" ? "Юридическое название" : "Legal name"}</span><input defaultValue="Horizon Technical Services LLC" /></label>
-            <label className="field-label"><span>{t.language}</span><span className="input-with-icon"><Languages size={17} /><select value={locale} onChange={(event) => setLocale(event.target.value as "ru" | "en")}><option value="ru">Русский</option><option value="en">English</option></select></span></label>
-            <label className="field-label"><span>{t.timezone}</span><select defaultValue="Asia/Dubai"><option>Asia/Dubai</option><option>Europe/Moscow</option><option>UTC</option></select></label>
-            <label className="field-label"><span>{t.currency}</span><select defaultValue="AED"><option>AED — UAE Dirham</option><option>USD — US Dollar</option><option>EUR — Euro</option></select></label>
-            <label className="field-label"><span>{t.tax}</span><select defaultValue="vat5"><option value="vat5">UAE VAT 5% · Exclusive</option><option value="none">No tax</option></select></label>
+            <label className="field-label"><span>{locale === "ru" ? "Название организации" : "Organization name"}</span><input name="name" defaultValue={settings.name} required /></label>
+            <label className="field-label"><span>{t.language}</span><span className="input-with-icon"><Languages size={17} /><select name="defaultLocale" defaultValue={settings.defaultLocale}><option value="ru">Русский</option><option value="en">English</option></select></span></label>
+            <label className="field-label"><span>{t.timezone}</span><select name="timezone" defaultValue={settings.timezone}><option>Asia/Dubai</option><option>Europe/Moscow</option><option>UTC</option></select></label>
+            <label className="field-label"><span>{t.currency}</span><select name="currency" defaultValue={settings.currency}><option value="AED">AED — UAE Dirham</option><option value="USD">USD — US Dollar</option><option value="EUR">EUR — Euro</option></select></label>
+            <label className="field-label"><span>{t.tax}</span><select name="taxRateBps" defaultValue={settings.taxRateBps}><option value="500">UAE VAT 5% · Exclusive</option><option value="0">No tax</option></select></label>
           </div>
+          {errorMessage && <p className="form-error" role="alert">{errorMessage}</p>}
           <div className="settings-note"><ShieldCheck size={19} /><div><strong>{locale === "ru" ? "Исторические данные не изменятся" : "Historical data will not change"}</strong><p>{locale === "ru" ? "Новая валюта и timezone применяются только к новым документам и отображению." : "New currency and timezone settings apply only to new documents and presentation."}</p></div></div>
-          <footer className="form-footer"><span>expectedVersion: 12</span><button className="primary-button" type="submit">{t.save}</button></footer>
+          <footer className="form-footer"><span>expectedVersion: {settings.version}</span><button className="primary-button" type="submit" disabled={pending}>{pending ? "…" : t.save}</button></footer>
         </section>
       </form>
     </div>
@@ -208,7 +237,7 @@ export function SettingsView() {
 function ViewHeading({ eyebrow, title, subtitle, action }: { eyebrow: string; title: string; subtitle: string; action?: string }) {
   // EN: Keep module title hierarchy and primary action consistent across the office app.
   // RU: Сохраняет единую иерархию заголовков и primary action во всём office-приложении.
-  return <header className="page-heading"><div><span className="eyebrow">{eyebrow}</span><h1>{title}</h1><p>{subtitle}</p></div>{action && <button className="primary-button" type="button"><Plus size={18} />{action}</button>}</header>;
+  return <header className="page-heading"><div><span className="eyebrow">{eyebrow}</span><h1>{title}</h1><p>{subtitle}</p></div>{action && <button className="primary-button" type="button" disabled><Plus size={18} />{action}</button>}</header>;
 }
 
 function MiniMetric({ icon: Icon, label, value, note }: { icon: typeof BarChart3; label: string; value: string; note: string }) {

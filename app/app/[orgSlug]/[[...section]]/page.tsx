@@ -1,5 +1,7 @@
 import { FlowDeskApp } from "@/src/shared/ui/flowdesk-app";
 import type { OfficeSection } from "@/src/shared/ui/flowdesk-shell";
+import { requireTenantPageContext } from "@/src/server/auth/tenant";
+import { listWorkOrders } from "@/src/server/work-orders/service";
 
 const officeSections = new Set<OfficeSection>([
   "dashboard",
@@ -23,5 +25,25 @@ export default async function OfficePage({ params }: { params: Promise<{ orgSlug
   // EN: Render one module inside the shared tenant workspace route.
   // RU: Отображает один модуль внутри общей tenant-route рабочего пространства.
   const resolvedParams = await params;
-  return <FlowDeskApp orgSlug={resolvedParams.orgSlug} section={resolveSection(resolvedParams.section?.[0])} />;
+  const activeSection = resolveSection(resolvedParams.section?.[0]);
+  const context = await requireTenantPageContext(resolvedParams.orgSlug, `/app/${resolvedParams.orgSlug}/${activeSection}`);
+  const initialWorkOrders = await listWorkOrders(context);
+  return (
+    <FlowDeskApp
+      orgSlug={context.organization.slug}
+      organizationName={context.organization.name}
+      displayName={context.session.displayName}
+      role={context.role}
+      initialSettings={{
+        name: context.organization.name,
+        defaultLocale: context.organization.defaultLocale as "ru" | "en",
+        timezone: context.organization.timezone,
+        currency: context.organization.currency,
+        taxRateBps: context.organization.taxRateBps,
+        version: context.organization.settingsVersion,
+      }}
+      section={activeSection}
+      initialWorkOrders={initialWorkOrders}
+    />
+  );
 }

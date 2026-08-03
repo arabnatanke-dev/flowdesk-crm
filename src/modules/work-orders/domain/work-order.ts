@@ -42,7 +42,7 @@ export type NewWorkOrderInput = {
   title: string;
   address: string;
   priority: WorkOrderPriority;
-  appointment: string;
+  scheduledStart: string | null;
 };
 
 export const initialWorkOrders: WorkOrder[] = [

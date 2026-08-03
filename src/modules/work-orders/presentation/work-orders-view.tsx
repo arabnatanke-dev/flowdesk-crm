@@ -35,12 +35,22 @@ export function WorkOrdersView({ onOpenCreate }: WorkOrdersViewProps) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<WorkOrderStatus | "ALL">("ALL");
   const [view, setView] = useState<"list" | "kanban" | "map">("list");
-  const [selectedId, setSelectedId] = useState<string | null>(() => searchParams.get("selected"));
+  const deepLinkedId = searchParams.get("selected");
+  const [selectionOverride, setSelectionOverride] = useState<{ urlValue: string | null; selectedId: string | null } | null>(null);
+  const selectedId = selectionOverride?.urlValue === deepLinkedId ? selectionOverride.selectedId : deepLinkedId;
+  const [pendingTransition, setPendingTransition] = useState(false);
+  const [transitionError, setTransitionError] = useState("");
   const selected = useMemo(() => {
     // EN: Resolve deep-linked selection from the latest tenant-scoped work-order snapshot.
     // RU: Находит заявку из deep-link в актуальном tenant-снимке реестра.
     return workOrders.find((workOrder) => workOrder.id === selectedId) ?? null;
   }, [selectedId, workOrders]);
+
+  function selectWorkOrder(id: string | null) {
+    // EN: Override selection for the current URL while allowing a later deep-link change to take precedence.
+    // RU: Переопределяет выбор для текущего URL, но отдаёт приоритет последующему изменению deep-link.
+    setSelectionOverride({ urlValue: deepLinkedId, selectedId: id });
+  }
 
   const filteredWorkOrders = useMemo(() => {
     // EN: Keep filtering deterministic and scoped to the current tenant snapshot.
@@ -53,10 +63,18 @@ export function WorkOrdersView({ onOpenCreate }: WorkOrdersViewProps) {
     });
   }, [query, status, workOrders]);
 
-  function handleTransition(order: WorkOrder, nextStatus: WorkOrderStatus) {
-    // EN: Execute the selected domain command through the module application API.
-    // RU: Выполняет выбранную доменную команду через прикладной API модуля.
-    transitionWorkOrder(order.id, nextStatus);
+  async function handleTransition(order: WorkOrder, nextStatus: WorkOrderStatus) {
+    // EN: Wait for server authorization and optimistic-version validation before confirming the transition.
+    // RU: Ожидает серверную авторизацию и проверку optimistic version до подтверждения перехода.
+    setPendingTransition(true);
+    setTransitionError("");
+    try {
+      await transitionWorkOrder(order.id, nextStatus, order.version);
+    } catch (error) {
+      setTransitionError(error instanceof Error ? error.message : "Transition failed.");
+    } finally {
+      setPendingTransition(false);
+    }
   }
 
   function clearFilters() {
@@ -75,7 +93,7 @@ export function WorkOrdersView({ onOpenCreate }: WorkOrdersViewProps) {
           <p>{t.workOrdersSubtitle}</p>
         </div>
         <div className="page-actions">
-          <button className="secondary-button" type="button"><Download size={17} />{t.export}</button>
+          <button className="secondary-button" type="button" disabled><Download size={17} />{t.export}</button>
           <button className="primary-button" type="button" onClick={onOpenCreate}><Plus size={18} />{t.newWorkOrder}</button>
         </div>
       </header>
@@ -104,7 +122,7 @@ export function WorkOrdersView({ onOpenCreate }: WorkOrdersViewProps) {
             </select>
             <ChevronDown size={14} aria-hidden="true" />
           </label>
-          <button className="icon-button" type="button" aria-label={t.filter}><SlidersHorizontal size={18} /></button>
+          <button className="icon-button" type="button" aria-label={t.filter} disabled><SlidersHorizontal size={18} /></button>
         </div>
       </section>
 
@@ -128,7 +146,7 @@ export function WorkOrdersView({ onOpenCreate }: WorkOrdersViewProps) {
               </thead>
               <tbody>
                 {filteredWorkOrders.map((order) => (
-                  <tr key={order.id} onClick={() => setSelectedId(order.id)}>
+                  <tr key={order.id} onClick={() => selectWorkOrder(order.id)}>
                     <td onClick={(event) => event.stopPropagation()}><input type="checkbox" aria-label={`${t.selected} ${order.number}`} /></td>
                     <td><strong className="order-number">{order.number}</strong><small>v{order.version}</small></td>
                     <td><strong>{order.client}</strong><small>{order.phone}</small></td>
@@ -138,7 +156,7 @@ export function WorkOrdersView({ onOpenCreate }: WorkOrdersViewProps) {
                     <td>{order.appointment ?? "—"}</td>
                     <td>{order.technician ?? <span className="muted">—</span>}</td>
                     <td className="money-cell">{order.amount}</td>
-                    <td><button className="table-action" type="button" aria-label={`${t.actions} ${order.number}`}><MoreHorizontal size={18} /></button></td>
+                    <td><button className="table-action" type="button" aria-label={`${t.actions} ${order.number}`} disabled><MoreHorizontal size={18} /></button></td>
                   </tr>
                 ))}
               </tbody>
@@ -147,7 +165,7 @@ export function WorkOrdersView({ onOpenCreate }: WorkOrdersViewProps) {
 
           <div className="mobile-record-list">
             {filteredWorkOrders.map((order) => (
-              <button className="mobile-record-card" type="button" key={order.id} onClick={() => setSelectedId(order.id)}>
+              <button className="mobile-record-card" type="button" key={order.id} onClick={() => selectWorkOrder(order.id)}>
                 <span className="record-card-top"><strong>{order.number}</strong><span className={`status-badge status-${getStatusTone(order.status)}`}>{getStatusLabel(order.status, locale)}</span></span>
                 <strong>{localizeText(order.title, locale)}</strong>
                 <span>{order.client} · {order.appointment ?? t.unscheduledQueue}</span>
@@ -160,7 +178,7 @@ export function WorkOrdersView({ onOpenCreate }: WorkOrdersViewProps) {
             <div className="empty-state"><Search size={26} /><strong>{t.noResults}</strong><button type="button" onClick={clearFilters}>{t.clearFilters}</button></div>
           )}
 
-          <footer className="table-footer"><span>{filteredWorkOrders.length} / {workOrders.length}</span><div><button type="button" disabled>←</button><button type="button" className="is-active">1</button><button type="button" disabled>→</button></div></footer>
+          <footer className="table-footer"><span>{filteredWorkOrders.length} / {workOrders.length}</span><div><button type="button" disabled>←</button><button type="button" className="is-active" disabled>1</button><button type="button" disabled>→</button></div></footer>
         </section>
       )}
 
@@ -169,11 +187,11 @@ export function WorkOrdersView({ onOpenCreate }: WorkOrdersViewProps) {
 
       {selected && (
         <aside className="detail-drawer" aria-label={`${t.workOrders} ${selected.number}`}>
-          <button className="drawer-backdrop" type="button" onClick={() => setSelectedId(null)} aria-label={t.close} />
+          <button className="drawer-backdrop" type="button" onClick={() => selectWorkOrder(null)} aria-label={t.close} />
           <div className="drawer-panel">
             <div className="drawer-heading">
               <div><span className="eyebrow">{selected.number} · v{selected.version}</span><h2>{localizeText(selected.title, locale)}</h2></div>
-              <button className="icon-button" type="button" onClick={() => setSelectedId(null)} aria-label={t.close}><X size={19} /></button>
+              <button className="icon-button" type="button" onClick={() => selectWorkOrder(null)} aria-label={t.close}><X size={19} /></button>
             </div>
             <div className="drawer-client"><strong>{selected.client}</strong><span>{selected.phone}</span><small>{localizeText(selected.address, locale)}</small></div>
             <dl className="detail-grid">
@@ -187,8 +205,9 @@ export function WorkOrdersView({ onOpenCreate }: WorkOrdersViewProps) {
             <div className="drawer-section">
               <span className="drawer-section-label">NEXT ACTIONS</span>
               <div className="transition-list">
+                {transitionError && <p className="form-error" role="alert">{transitionError}</p>}
                 {getAvailableTransitions(selected.status).map((nextStatus) => (
-                  <button type="button" key={nextStatus} onClick={() => handleTransition(selected, nextStatus)}>
+                  <button type="button" key={nextStatus} disabled={pendingTransition} onClick={() => handleTransition(selected, nextStatus)}>
                     <span>{getStatusLabel(nextStatus, locale)}</span><ArrowRight size={16} />
                   </button>
                 ))}

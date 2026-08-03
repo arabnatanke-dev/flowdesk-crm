@@ -1,84 +1,82 @@
 "use client";
 
-import {
-  createContext,
-  useContext,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
-import { canTransition } from "../domain/state-machine";
-import {
-  initialWorkOrders,
-  type NewWorkOrderInput,
-  type WorkOrder,
-  type WorkOrderStatus,
-} from "../domain/work-order";
+import { createContext, useContext, useState, type ReactNode } from "react";
+import type { NewWorkOrderInput, WorkOrder, WorkOrderStatus } from "../domain/work-order";
 
 type WorkOrderStoreValue = {
   workOrders: WorkOrder[];
-  createWorkOrder: (input: NewWorkOrderInput) => WorkOrder;
-  transitionWorkOrder: (id: string, to: WorkOrderStatus) => void;
+  createWorkOrder: (input: NewWorkOrderInput) => Promise<WorkOrder>;
+  transitionWorkOrder: (id: string, to: WorkOrderStatus, expectedVersion: number) => Promise<WorkOrder>;
+};
+
+type ApiEnvelope = {
+  workOrder?: WorkOrder;
+  error?: { message?: string };
 };
 
 const WorkOrderStore = createContext<WorkOrderStoreValue | null>(null);
 
-export function WorkOrderProvider({ children }: { children: ReactNode }) {
-  // EN: Own the demo aggregate state behind a module-level application boundary.
-  // RU: Хранит демонстрационное состояние агрегата за границей прикладного модуля.
-  const [workOrders, setWorkOrders] = useState<WorkOrder[]>(initialWorkOrders);
-  const nextSequence = useRef(1049);
+async function readWorkOrderResponse(response: Response): Promise<WorkOrder> {
+  // EN: Convert the stable API envelope to a work order or a safe user-facing failure.
+  // RU: Преобразует стабильный API-конверт в заявку или безопасную пользовательскую ошибку.
+  const payload = await response.json() as ApiEnvelope;
+  if (!response.ok || !payload.workOrder) throw new Error(payload.error?.message ?? "Work-order command failed.");
+  return payload.workOrder;
+}
 
-  function createWorkOrder(input: NewWorkOrderInput): WorkOrder {
-    // EN: Create a normalized NEW aggregate with an independent optimistic version.
-    // RU: Создаёт нормализованный агрегат NEW с отдельной оптимистической версией.
-    const allocatedSequence = nextSequence.current;
-    nextSequence.current += 1;
-    const created: WorkOrder = {
-      id: `wo-${allocatedSequence}`,
-      number: `WO-${allocatedSequence}`,
-      client: input.client.trim(),
-      phone: input.phone.trim(),
-      title: { ru: input.title.trim(), en: input.title.trim() },
-      address: { ru: input.address.trim(), en: input.address.trim() },
-      status: input.appointment ? "SCHEDULED" : "NEW",
-      priority: input.priority,
-      appointment: input.appointment || null,
-      technician: null,
-      amount: "AED 0.00",
-      slaMinutes: 120,
-      version: 1,
-    };
+export function WorkOrderProvider({
+  children,
+  orgSlug,
+  initialWorkOrders,
+}: {
+  children: ReactNode;
+  orgSlug: string;
+  initialWorkOrders: WorkOrder[];
+}) {
+  // EN: Synchronize the tenant work-order snapshot only with authenticated server commands.
+  // RU: Синхронизирует tenant-снимок заявок только через авторизованные серверные команды.
+  const [workOrders, setWorkOrders] = useState<WorkOrder[]>(initialWorkOrders);
+
+  async function createWorkOrder(input: NewWorkOrderInput): Promise<WorkOrder> {
+    // EN: Persist creation through the tenant API before adding the confirmed aggregate locally.
+    // RU: Сохраняет создание через tenant API до добавления подтверждённого агрегата локально.
+    const response = await fetch(`/api/organizations/${encodeURIComponent(orgSlug)}/work-orders`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    const created = await readWorkOrderResponse(response);
     setWorkOrders((current) => [created, ...current]);
     return created;
   }
 
-  function transitionWorkOrder(id: string, to: WorkOrderStatus): void {
-    // EN: Apply a domain-approved transition and bump the aggregate version.
-    // RU: Применяет разрешённый доменом переход и увеличивает версию агрегата.
-    setWorkOrders((current) =>
-      current.map((workOrder) => {
-        if (workOrder.id !== id || !canTransition(workOrder.status, to)) {
-          return workOrder;
-        }
-        return { ...workOrder, status: to, version: workOrder.version + 1 };
-      }),
+  async function transitionWorkOrder(id: string, to: WorkOrderStatus, expectedVersion: number): Promise<WorkOrder> {
+    // EN: Replace local state only after the server validates role, transition and optimistic version.
+    // RU: Обновляет локальное состояние только после проверки сервером роли, перехода и optimistic version.
+    const response = await fetch(
+      `/api/organizations/${encodeURIComponent(orgSlug)}/work-orders/${encodeURIComponent(id)}/transition`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ to, expectedVersion }),
+      },
     );
+    const updated = await readWorkOrderResponse(response);
+    setWorkOrders((current) => current.map((workOrder) => workOrder.id === id ? updated : workOrder));
+    return updated;
   }
 
-  const value = { workOrders, createWorkOrder, transitionWorkOrder };
-
   return (
-    <WorkOrderStore.Provider value={value}>{children}</WorkOrderStore.Provider>
+    <WorkOrderStore.Provider value={{ workOrders, createWorkOrder, transitionWorkOrder }}>
+      {children}
+    </WorkOrderStore.Provider>
   );
 }
 
 export function useWorkOrders(): WorkOrderStoreValue {
-  // EN: Give presentation code access to the module's public application API.
-  // RU: Даёт интерфейсу доступ к публичному прикладному API модуля.
+  // EN: Give presentation code access to the module's authenticated application API.
+  // RU: Даёт интерфейсу доступ к авторизованному прикладному API модуля.
   const context = useContext(WorkOrderStore);
-  if (!context) {
-    throw new Error("useWorkOrders must be used within WorkOrderProvider");
-  }
+  if (!context) throw new Error("useWorkOrders must be used within WorkOrderProvider");
   return context;
 }

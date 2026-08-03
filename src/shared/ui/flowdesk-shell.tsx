@@ -10,6 +10,7 @@ import {
   Command,
   FileBarChart,
   LayoutDashboard,
+  LogOut,
   Menu,
   Package,
   Plus,
@@ -22,6 +23,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useLocale } from "@/src/shared/i18n/locale-context";
 import { LanguageSwitch } from "./language-switch";
 import { DashboardView } from "@/src/modules/dashboard/presentation/dashboard-view";
@@ -30,24 +32,32 @@ import { DispatchView } from "@/src/modules/dispatch/presentation/dispatch-view"
 import { CatalogView, ClientsView, FinanceView, ReportsView, SettingsView, TeamView } from "@/src/modules/overview/presentation/business-views";
 import { useWorkOrders } from "@/src/modules/work-orders/application/work-order-store";
 import type { NewWorkOrderInput, WorkOrderPriority } from "@/src/modules/work-orders/domain/work-order";
+import type { MembershipRole } from "@/src/server/auth/permissions";
+import type { OrganizationSettings } from "@/src/server/settings/service";
 
 export type OfficeSection = "dashboard" | "work-orders" | "dispatch" | "clients" | "team" | "catalog" | "finance" | "reports" | "settings";
 
 type FlowDeskShellProps = {
   orgSlug: string;
+  organizationName: string;
+  displayName: string;
+  role: MembershipRole;
+  initialSettings: OrganizationSettings;
   section: OfficeSection;
 };
 
-export function FlowDeskShell({ orgSlug, section }: FlowDeskShellProps) {
+export function FlowDeskShell({ orgSlug, organizationName, displayName, role, initialSettings, section }: FlowDeskShellProps) {
   // EN: Compose the role-aware office shell around independently bounded module views.
   // RU: Собирает роль-ориентированную office-оболочку вокруг независимых модулей.
   const { locale, messages: t } = useLocale();
+  const router = useRouter();
   const { workOrders } = useWorkOrders();
   const [createOpen, setCreateOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
   const [toast, setToast] = useState("");
+  const initials = displayName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
 
   const navigation = [
     { key: "dashboard" as const, label: t.dashboard, href: `/app/${orgSlug}/dashboard`, icon: LayoutDashboard },
@@ -100,6 +110,13 @@ export function FlowDeskShell({ orgSlug, section }: FlowDeskShellProps) {
     window.setTimeout(() => setToast(""), 3200);
   }
 
+  async function handleLogout() {
+    // EN: Revoke the server session before returning the user to the public login page.
+    // RU: Отзывает серверную сессию до возврата пользователя на публичную страницу входа.
+    const response = await fetch("/api/auth/logout", { method: "POST" });
+    if (response.ok) router.replace("/");
+  }
+
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">Skip to content</a>
@@ -112,9 +129,9 @@ export function FlowDeskShell({ orgSlug, section }: FlowDeskShellProps) {
           <button className="mobile-close" type="button" onClick={() => setMobileMenuOpen(false)} aria-label={t.close}><X size={20} /></button>
         </div>
 
-        <button className="tenant-switcher" type="button">
+        <button className="tenant-switcher" type="button" disabled>
           <span className="tenant-logo">HS</span>
-          <span><small>{t.organization}</small><strong>{t.demoCompany}</strong></span>
+          <span><small>{t.organization}</small><strong>{organizationName}</strong></span>
           <ChevronDown size={15} />
         </button>
 
@@ -133,9 +150,9 @@ export function FlowDeskShell({ orgSlug, section }: FlowDeskShellProps) {
         </nav>
 
         <div className="sidebar-user">
-          <span className="avatar avatar-blue">АС</span>
-          <span><strong>{t.userName}</strong><small>{t.userRole}</small></span>
-          <ChevronDown size={15} />
+          <span className="avatar avatar-blue">{initials}</span>
+          <span><strong>{displayName}</strong><small>{role}</small></span>
+          <button className="table-action" type="button" onClick={handleLogout} aria-label={locale === "ru" ? "Выйти" : "Sign out"}><LogOut size={16} /></button>
         </div>
       </aside>
 
@@ -149,14 +166,14 @@ export function FlowDeskShell({ orgSlug, section }: FlowDeskShellProps) {
           </button>
           <div className="topbar-actions">
             <LanguageSwitch compact />
-            <button className="icon-button topbar-icon" type="button" aria-label={t.help}><CircleHelp size={19} /></button>
-            <button className="icon-button topbar-icon notification-button" type="button" aria-label={t.notifications}><Bell size={19} /><span /></button>
+            <button className="icon-button topbar-icon" type="button" aria-label={t.help} disabled><CircleHelp size={19} /></button>
+            <button className="icon-button topbar-icon notification-button" type="button" aria-label={t.notifications} disabled><Bell size={19} /><span /></button>
             <button className="quick-create-button" type="button" onClick={openCreateDrawer}><Plus size={19} /><span>{t.create}</span></button>
           </div>
         </header>
 
         <main id="main-content" className="app-content">
-          <CurrentSection orgSlug={orgSlug} section={section} onOpenCreate={openCreateDrawer} />
+          <CurrentSection orgSlug={orgSlug} initialSettings={initialSettings} section={section} onOpenCreate={openCreateDrawer} />
         </main>
       </div>
 
@@ -182,7 +199,7 @@ export function FlowDeskShell({ orgSlug, section }: FlowDeskShellProps) {
   );
 }
 
-function CurrentSection({ orgSlug, section, onOpenCreate }: { orgSlug: string; section: OfficeSection; onOpenCreate: () => void }) {
+function CurrentSection({ orgSlug, initialSettings, section, onOpenCreate }: { orgSlug: string; initialSettings: OrganizationSettings; section: OfficeSection; onOpenCreate: () => void }) {
   // EN: Route the office shell to one bounded presentation module.
   // RU: Направляет office-оболочку к одному ограниченному presentation-модулю.
   switch (section) {
@@ -193,7 +210,7 @@ function CurrentSection({ orgSlug, section, onOpenCreate }: { orgSlug: string; s
     case "catalog": return <CatalogView />;
     case "finance": return <FinanceView />;
     case "reports": return <ReportsView />;
-    case "settings": return <SettingsView />;
+    case "settings": return <SettingsView orgSlug={orgSlug} initialSettings={initialSettings} />;
     default: return <DashboardView orgSlug={orgSlug} onOpenCreate={onOpenCreate} />;
   }
 }
@@ -204,19 +221,22 @@ function CreateWorkOrderDrawer({ onClose, onCreated }: { onClose: () => void; on
   const { messages: t } = useLocale();
   const { createWorkOrder } = useWorkOrders();
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [commandError, setCommandError] = useState("");
 
-  function handleCreate(event: FormEvent<HTMLFormElement>) {
+  async function handleCreate(event: FormEvent<HTMLFormElement>) {
     // EN: Validate the client boundary before passing normalized data to the application module.
     // RU: Валидирует клиентскую границу перед передачей нормализованных данных в прикладной модуль.
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const scheduledStartValue = String(form.get("scheduledStart") ?? "");
     const input: NewWorkOrderInput = {
       client: String(form.get("client") ?? ""),
       phone: String(form.get("phone") ?? ""),
       title: String(form.get("title") ?? ""),
       address: String(form.get("address") ?? ""),
       priority: String(form.get("priority") ?? "NORMAL") as WorkOrderPriority,
-      appointment: String(form.get("appointment") ?? ""),
+      scheduledStart: scheduledStartValue ? new Date(scheduledStartValue).toISOString() : null,
     };
     const nextErrors: Record<string, string> = {};
     if (!input.client.trim()) nextErrors.client = t.required;
@@ -224,9 +244,17 @@ function CreateWorkOrderDrawer({ onClose, onCreated }: { onClose: () => void; on
     if (!input.address.trim()) nextErrors.address = t.required;
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
-    createWorkOrder(input);
-    onCreated();
-    onClose();
+    setSubmitting(true);
+    setCommandError("");
+    try {
+      await createWorkOrder(input);
+      onCreated();
+      onClose();
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : "Work-order command failed.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -241,10 +269,11 @@ function CreateWorkOrderDrawer({ onClose, onCreated }: { onClose: () => void; on
           <label className={`field-label ${errors.address ? "has-error" : ""}`}><span>{t.serviceAddress} *</span><input name="address" placeholder="Dubai Marina · Marina Gate" />{errors.address && <small>{errors.address}</small>}</label>
           <div className="form-grid two-columns">
             <label className="field-label"><span>{t.priorityLabel}</span><select name="priority" defaultValue="NORMAL"><option value="LOW">LOW</option><option value="NORMAL">NORMAL</option><option value="HIGH">HIGH</option><option value="URGENT">URGENT</option></select></label>
-            <label className="field-label"><span>{t.preferredWindow}</span><select name="appointment" defaultValue=""><option value="">—</option><option value="09:00–10:30">09:00–10:30</option><option value="13:00–14:30">13:00–14:30</option><option value="15:00–16:30">15:00–16:30</option></select></label>
+            <label className="field-label"><span>{t.preferredWindow}</span><input name="scheduledStart" type="datetime-local" /></label>
           </div>
+          {commandError && <p className="form-error" role="alert">{commandError}</p>}
         </div>
-        <footer className="drawer-footer"><button className="secondary-button" type="button" onClick={onClose}>{t.cancel}</button><button className="primary-button" type="submit"><Plus size={17} />{t.create}</button></footer>
+        <footer className="drawer-footer"><button className="secondary-button" type="button" onClick={onClose}>{t.cancel}</button><button className="primary-button" type="submit" disabled={submitting}><Plus size={17} />{submitting ? "…" : t.create}</button></footer>
       </form>
     </aside>
   );

@@ -59,7 +59,7 @@ export function DashboardView({ orgSlug, onOpenCreate }: DashboardViewProps) {
           <p>{t.dashboardSubtitle}</p>
         </div>
         <div className="page-actions">
-          <button className="secondary-button" type="button"><UserPlus size={17} />{t.newClient}</button>
+          <button className="secondary-button" type="button" disabled><UserPlus size={17} />{t.newClient}</button>
           <button className="primary-button" type="button" onClick={onOpenCreate}><Plus size={18} />{t.newWorkOrder}</button>
         </div>
       </header>
