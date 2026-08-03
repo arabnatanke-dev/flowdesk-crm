@@ -3,6 +3,7 @@
 import { ArrowRight, CheckCircle2, LockKeyhole, ShieldCheck } from "lucide-react";
 import type { FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useLocale } from "@/src/shared/i18n/locale-context";
 import { LanguageSwitch } from "@/src/shared/ui/language-switch";
 
@@ -10,12 +11,13 @@ export function LoginView() {
   // EN: Render the public authentication entry point defined by AUTH-01.
   // RU: Отображает публичную точку входа, определённую экраном AUTH-01.
   const { messages: t } = useLocale();
+  const router = useRouter();
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     // EN: Open the synthetic tenant used for the current foundation demo.
     // RU: Открывает синтетический tenant для текущей демонстрации фундамента.
     event.preventDefault();
-    window.location.assign("/app/horizon/dashboard");
+    router.push("/app/horizon/dashboard");
   }
 
   return (
