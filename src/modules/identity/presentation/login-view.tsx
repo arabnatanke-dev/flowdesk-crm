@@ -1,9 +1,9 @@
 "use client";
 
 import { ArrowRight, CheckCircle2, LockKeyhole, ShieldCheck } from "lucide-react";
-import type { FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useLocale } from "@/src/shared/i18n/locale-context";
 import { LanguageSwitch } from "@/src/shared/ui/language-switch";
 
@@ -12,12 +12,36 @@ export function LoginView() {
   // RU: Отображает публичную точку входа, определённую экраном AUTH-01.
   const { messages: t } = useLocale();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const [pending, setPending] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    // EN: Open the synthetic tenant used for the current foundation demo.
-    // RU: Открывает синтетический tenant для текущей демонстрации фундамента.
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    // EN: Submit credentials to the server and navigate only to its authorized tenant destination.
+    // RU: Передаёт учётные данные серверу и открывает только разрешённый им tenant-адрес.
     event.preventDefault();
-    router.push("/app/horizon/dashboard");
+    setPending(true);
+    setErrorMessage("");
+    const form = new FormData(event.currentTarget);
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: String(form.get("email") ?? ""),
+          password: String(form.get("password") ?? ""),
+          remember: form.get("remember") === "on",
+          returnTo: searchParams.get("returnTo"),
+        }),
+      });
+      const payload = await response.json() as { redirectTo?: string; error?: { message?: string } };
+      if (!response.ok || !payload.redirectTo) throw new Error(payload.error?.message ?? "Sign-in failed.");
+      router.replace(payload.redirectTo);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Sign-in failed.");
+    } finally {
+      setPending(false);
+    }
   }
 
   return (
@@ -63,27 +87,29 @@ export function LoginView() {
 
           <label className="field-label">
             <span>{t.email}</span>
-            <input type="email" defaultValue="owner@horizon.ae" autoComplete="email" />
+            <input name="email" type="email" autoComplete="email" required />
           </label>
 
           <label className="field-label">
             <span>{t.password}</span>
-            <input type="password" defaultValue="flowdesk-demo" autoComplete="current-password" />
+            <input name="password" type="password" autoComplete="current-password" required />
           </label>
 
           <div className="login-options">
             <label className="checkbox-label">
-              <input type="checkbox" defaultChecked />
+              <input name="remember" type="checkbox" />
               <span>{t.remember}</span>
             </label>
             <a href="#recovery">{t.forgot}</a>
           </div>
 
-          <button className="primary-button login-submit" type="submit">
-            {t.demoAccess}<ArrowRight size={18} />
+          {errorMessage && <p className="form-error" role="alert">{errorMessage}</p>}
+
+          <button className="primary-button login-submit" type="submit" disabled={pending}>
+            {pending ? "…" : t.signIn}<ArrowRight size={18} />
           </button>
 
-          <p className="demo-note">Demo · RU / EN · Asia/Dubai · AED</p>
+          <p className="demo-note">FlowDesk CRM · RU / EN</p>
         </form>
       </section>
     </main>
