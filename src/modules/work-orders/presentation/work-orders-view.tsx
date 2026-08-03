@@ -14,7 +14,7 @@ import {
   SlidersHorizontal,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { useLocale } from "@/src/shared/i18n/locale-context";
 import { useWorkOrders } from "../application/work-order-store";
@@ -30,7 +30,7 @@ export function WorkOrdersView({ onOpenCreate }: WorkOrdersViewProps) {
   // EN: Present searchable work orders with status-safe commands and responsive list patterns.
   // RU: Показывает реестр заявок с поиском, безопасными переходами и адаптивным списком.
   const { locale, messages: t } = useLocale();
-  const { workOrders, transitionWorkOrder } = useWorkOrders();
+  const { workOrders, technicians, transitionWorkOrder, updateWorkOrder, assignWorkOrder, scheduleWorkOrder } = useWorkOrders();
   const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<WorkOrderStatus | "ALL">("ALL");
@@ -40,6 +40,8 @@ export function WorkOrdersView({ onOpenCreate }: WorkOrdersViewProps) {
   const selectedId = selectionOverride?.urlValue === deepLinkedId ? selectionOverride.selectedId : deepLinkedId;
   const [pendingTransition, setPendingTransition] = useState(false);
   const [transitionError, setTransitionError] = useState("");
+  const [pendingCommand, setPendingCommand] = useState(false);
+  const [commandError, setCommandError] = useState("");
   const selected = useMemo(() => {
     // EN: Resolve deep-linked selection from the latest tenant-scoped work-order snapshot.
     // RU: Находит заявку из deep-link в актуальном tenant-снимке реестра.
@@ -75,6 +77,57 @@ export function WorkOrdersView({ onOpenCreate }: WorkOrdersViewProps) {
     } finally {
       setPendingTransition(false);
     }
+  }
+
+  async function runWorkOrderCommand(command: () => Promise<WorkOrder>): Promise<void> {
+    // EN: Share pending and error behavior across edit, assignment and scheduling commands.
+    // RU: Объединяет pending- и error-поведение команд редактирования, назначения и расписания.
+    setPendingCommand(true);
+    setCommandError("");
+    try {
+      await command();
+    } catch (error) {
+      setCommandError(error instanceof Error ? error.message : "Work-order command failed.");
+    } finally {
+      setPendingCommand(false);
+    }
+  }
+
+  async function handleUpdate(event: FormEvent<HTMLFormElement>, order: WorkOrder): Promise<void> {
+    // EN: Submit editable customer and job fields with the currently displayed aggregate version.
+    // RU: Отправляет редактируемые данные клиента и работы с текущей версией агрегата.
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    await runWorkOrderCommand(() => updateWorkOrder(order.id, {
+      client: String(form.get("client") ?? ""),
+      phone: String(form.get("phone") ?? ""),
+      title: String(form.get("title") ?? ""),
+      address: String(form.get("address") ?? ""),
+      priority: String(form.get("priority") ?? "NORMAL") as WorkOrder["priority"],
+    }, order.version));
+  }
+
+  async function handleAssignment(event: FormEvent<HTMLFormElement>, order: WorkOrder): Promise<void> {
+    // EN: Submit an explicit tenant technician or null assignment with optimistic concurrency.
+    // RU: Отправляет явное назначение tenant-техника или null с optimistic concurrency.
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const technicianId = String(form.get("technicianId") ?? "") || null;
+    await runWorkOrderCommand(() => assignWorkOrder(order.id, technicianId, order.version));
+  }
+
+  async function handleSchedule(event: FormEvent<HTMLFormElement>, order: WorkOrder): Promise<void> {
+    // EN: Convert local form values to absolute instants before the versioned schedule command.
+    // RU: Преобразует локальные значения формы в абсолютные моменты до versioned schedule-команды.
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const start = new Date(String(form.get("scheduledStart") ?? ""));
+    const end = new Date(String(form.get("scheduledEnd") ?? ""));
+    await runWorkOrderCommand(() => scheduleWorkOrder(order.id, {
+      scheduledStart: start.toISOString(),
+      scheduledEnd: end.toISOString(),
+      timezone: String(form.get("timezone") ?? order.timezone),
+    }, order.version));
   }
 
   function clearFilters() {
@@ -154,7 +207,7 @@ export function WorkOrdersView({ onOpenCreate }: WorkOrdersViewProps) {
                     <td><span className={`status-badge status-${getStatusTone(order.status)}`}>{getStatusLabel(order.status, locale)}</span></td>
                     <td><span className={`priority-label priority-${order.priority.toLowerCase()}`}><span />{getPriorityLabel(order.priority, locale)}</span></td>
                     <td>{order.appointment ?? "—"}</td>
-                    <td>{order.technician ?? <span className="muted">—</span>}</td>
+                    <td>{order.technician?.displayName ?? <span className="muted">—</span>}</td>
                     <td className="money-cell">{order.amount}</td>
                     <td><button className="table-action" type="button" aria-label={`${t.actions} ${order.number}`} disabled><MoreHorizontal size={18} /></button></td>
                   </tr>
@@ -198,10 +251,38 @@ export function WorkOrdersView({ onOpenCreate }: WorkOrdersViewProps) {
               <div><dt>{t.status}</dt><dd><span className={`status-badge status-${getStatusTone(selected.status)}`}>{getStatusLabel(selected.status, locale)}</span></dd></div>
               <div><dt>{t.priority}</dt><dd>{getPriorityLabel(selected.priority, locale)}</dd></div>
               <div><dt>{t.appointment}</dt><dd>{selected.appointment ?? t.unscheduledQueue}</dd></div>
-              <div><dt>{t.technician}</dt><dd>{selected.technician ?? "—"}</dd></div>
+              <div><dt>{t.technician}</dt><dd>{selected.technician?.displayName ?? "—"}</dd></div>
               <div><dt>{t.amount}</dt><dd className="money-cell">{selected.amount}</dd></div>
               <div><dt>SLA</dt><dd>{selected.slaMinutes ? `${selected.slaMinutes} min` : "—"}</dd></div>
             </dl>
+            <div className="drawer-section">
+              <span className="drawer-section-label">{locale === "ru" ? "РЕДАКТИРОВАНИЕ" : "EDIT DETAILS"}</span>
+              {commandError && <p className="form-error" role="alert">{commandError}</p>}
+              <form className="form-stack" key={`edit-${selected.id}-${selected.version}`} onSubmit={(event) => handleUpdate(event, selected)}>
+                <label className="field-label"><span>{t.client}</span><input name="client" defaultValue={selected.client} required /></label>
+                <label className="field-label"><span>{t.phone}</span><input name="phone" defaultValue={selected.phone} /></label>
+                <label className="field-label"><span>{t.job}</span><input name="title" defaultValue={localizeText(selected.title, locale)} required /></label>
+                <label className="field-label"><span>{t.serviceAddress}</span><input name="address" defaultValue={localizeText(selected.address, locale)} required /></label>
+                <label className="field-label"><span>{t.priority}</span><select name="priority" defaultValue={selected.priority}><option>LOW</option><option>NORMAL</option><option>HIGH</option><option>URGENT</option></select></label>
+                <button className="secondary-button" type="submit" disabled={pendingCommand}>{pendingCommand ? "…" : t.save}</button>
+              </form>
+            </div>
+            <div className="drawer-section">
+              <span className="drawer-section-label">{locale === "ru" ? "НАЗНАЧЕНИЕ" : "ASSIGNMENT"}</span>
+              <form className="form-stack" key={`assign-${selected.id}-${selected.version}`} onSubmit={(event) => handleAssignment(event, selected)}>
+                <label className="field-label"><span>{t.technician}</span><select name="technicianId" defaultValue={selected.technician?.id ?? ""}><option value="">—</option>{technicians.map((technician) => <option key={technician.id} value={technician.id}>{technician.displayName}</option>)}</select></label>
+                <button className="secondary-button" type="submit" disabled={pendingCommand}>{pendingCommand ? "…" : (locale === "ru" ? "Назначить" : "Assign")}</button>
+              </form>
+            </div>
+            <div className="drawer-section">
+              <span className="drawer-section-label">{locale === "ru" ? "РАСПИСАНИЕ" : "SCHEDULE"}</span>
+              <form className="form-stack" key={`schedule-${selected.id}-${selected.version}`} onSubmit={(event) => handleSchedule(event, selected)}>
+                <label className="field-label"><span>{locale === "ru" ? "Начало" : "Start"}</span><input name="scheduledStart" type="datetime-local" required /></label>
+                <label className="field-label"><span>{locale === "ru" ? "Окончание" : "End"}</span><input name="scheduledEnd" type="datetime-local" required /></label>
+                <label className="field-label"><span>{t.timezone}</span><select name="timezone" defaultValue={selected.timezone}><option>Asia/Dubai</option><option>Europe/Moscow</option><option>UTC</option></select></label>
+                <button className="secondary-button" type="submit" disabled={pendingCommand}>{pendingCommand ? "…" : (locale === "ru" ? "Сохранить расписание" : "Save schedule")}</button>
+              </form>
+            </div>
             <div className="drawer-section">
               <span className="drawer-section-label">NEXT ACTIONS</span>
               <div className="transition-list">

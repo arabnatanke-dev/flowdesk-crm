@@ -1,7 +1,9 @@
 import { FlowDeskApp } from "@/src/shared/ui/flowdesk-app";
 import type { OfficeSection } from "@/src/shared/ui/flowdesk-shell";
 import { requireTenantPageContext } from "@/src/server/auth/tenant";
-import { listWorkOrders } from "@/src/server/work-orders/service";
+import { listAssignableTechnicians, listWorkOrders } from "@/src/server/work-orders/service";
+import { redirect } from "next/navigation";
+import { canAccessOfficeSection, canReadWorkOrders, getDefaultOfficeSection } from "@/src/server/auth/permissions";
 
 const officeSections = new Set<OfficeSection>([
   "dashboard",
@@ -27,7 +29,14 @@ export default async function OfficePage({ params }: { params: Promise<{ orgSlug
   const resolvedParams = await params;
   const activeSection = resolveSection(resolvedParams.section?.[0]);
   const context = await requireTenantPageContext(resolvedParams.orgSlug, `/app/${resolvedParams.orgSlug}/${activeSection}`);
-  const initialWorkOrders = await listWorkOrders(context);
+  if (!canAccessOfficeSection(context.role, activeSection)) {
+    const defaultSection = getDefaultOfficeSection(context.role);
+    redirect(defaultSection ? `/app/${context.organization.slug}/${defaultSection}` : `/m/${context.organization.slug}`);
+  }
+  const [initialWorkOrders, initialTechnicians] = await Promise.all([
+    canReadWorkOrders(context.role) ? listWorkOrders(context) : Promise.resolve([]),
+    listAssignableTechnicians(context),
+  ]);
   return (
     <FlowDeskApp
       orgSlug={context.organization.slug}
@@ -44,6 +53,7 @@ export default async function OfficePage({ params }: { params: Promise<{ orgSlug
       }}
       section={activeSection}
       initialWorkOrders={initialWorkOrders}
+      initialTechnicians={initialTechnicians}
     />
   );
 }

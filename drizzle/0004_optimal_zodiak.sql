@@ -1,0 +1,1 @@
+CREATE INDEX "sessions_last_seen_idx" ON "sessions" USING btree ("last_seen_at");

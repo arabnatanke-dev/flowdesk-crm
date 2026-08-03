@@ -23,11 +23,20 @@ export function assertSameOrigin(request: Request): void {
 }
 
 export function getClientAddress(request: Request): string {
-  // EN: Resolve the first proxy-provided address for privacy-preserving rate-limit hashing.
-  // RU: Определяет первый proxy-адрес для приватного хеширования rate-limit ключа.
-  return request.headers.get("cf-connecting-ip")
-    ?? request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
-    ?? "unknown";
+  // EN: Trust one configured proxy header and fail closed when production proxy identity is not configured.
+  // RU: Доверяет одному proxy-заголовку и закрывает доступ, если proxy identity не настроен в production.
+  const configuredValue = process.env.TRUSTED_PROXY_HEADER?.trim();
+  if (!configuredValue && process.env.NODE_ENV === "production") {
+    throw new Error("TRUSTED_PROXY_HEADER is required in production.");
+  }
+  const configuredHeader = (configuredValue || "cf-connecting-ip").toLowerCase();
+  const allowedHeaders = new Set(["cf-connecting-ip", "x-real-ip"]);
+  if (!allowedHeaders.has(configuredHeader)) throw new Error("TRUSTED_PROXY_HEADER must be cf-connecting-ip or x-real-ip.");
+  const address = request.headers.get(configuredHeader)?.trim();
+  if (!address && process.env.NODE_ENV === "production") {
+    throw new Error(`Trusted proxy header ${configuredHeader} is missing from the production request.`);
+  }
+  return address || "unavailable";
 }
 
 export function apiErrorResponse(error: unknown): NextResponse {

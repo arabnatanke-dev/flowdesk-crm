@@ -32,7 +32,7 @@ import { DispatchView } from "@/src/modules/dispatch/presentation/dispatch-view"
 import { CatalogView, ClientsView, FinanceView, ReportsView, SettingsView, TeamView } from "@/src/modules/overview/presentation/business-views";
 import { useWorkOrders } from "@/src/modules/work-orders/application/work-order-store";
 import type { NewWorkOrderInput, WorkOrderPriority } from "@/src/modules/work-orders/domain/work-order";
-import type { MembershipRole } from "@/src/server/auth/permissions";
+import { canAccessOfficeSection, canCreateWorkOrder, type MembershipRole } from "@/src/server/auth/permissions";
 import type { OrganizationSettings } from "@/src/server/settings/service";
 
 export type OfficeSection = "dashboard" | "work-orders" | "dispatch" | "clients" | "team" | "catalog" | "finance" | "reports" | "settings";
@@ -57,6 +57,7 @@ export function FlowDeskShell({ orgSlug, organizationName, displayName, role, in
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState("");
   const [toast, setToast] = useState("");
+  const canManageWorkOrders = canCreateWorkOrder(role);
   const initials = displayName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
 
   const navigation = [
@@ -68,7 +69,7 @@ export function FlowDeskShell({ orgSlug, organizationName, displayName, role, in
     { key: "catalog" as const, label: t.catalog, href: `/app/${orgSlug}/catalog`, icon: Package },
     { key: "finance" as const, label: t.finance, href: `/app/${orgSlug}/finance`, icon: WalletCards },
     { key: "reports" as const, label: t.reports, href: `/app/${orgSlug}/reports`, icon: FileBarChart },
-  ];
+  ].filter((item) => canAccessOfficeSection(role, item.key));
 
   useEffect(() => {
     // EN: Open the authorized global search from the shared keyboard shortcut.
@@ -145,7 +146,7 @@ export function FlowDeskShell({ orgSlug, organizationName, displayName, role, in
         </nav>
 
         <nav className="sidebar-nav sidebar-nav-bottom" aria-label="Secondary">
-          <Link className={section === "settings" ? "is-active" : ""} href={`/app/${orgSlug}/settings`}><Settings size={19} strokeWidth={1.8} /><span>{t.settings}</span></Link>
+          {canAccessOfficeSection(role, "settings") && <Link className={section === "settings" ? "is-active" : ""} href={`/app/${orgSlug}/settings`}><Settings size={19} strokeWidth={1.8} /><span>{t.settings}</span></Link>}
           <a href="#help"><BookOpen size={19} strokeWidth={1.8} /><span>{t.help}</span></a>
         </nav>
 
@@ -168,7 +169,7 @@ export function FlowDeskShell({ orgSlug, organizationName, displayName, role, in
             <LanguageSwitch compact />
             <button className="icon-button topbar-icon" type="button" aria-label={t.help} disabled><CircleHelp size={19} /></button>
             <button className="icon-button topbar-icon notification-button" type="button" aria-label={t.notifications} disabled><Bell size={19} /><span /></button>
-            <button className="quick-create-button" type="button" onClick={openCreateDrawer}><Plus size={19} /><span>{t.create}</span></button>
+            {canManageWorkOrders && <button className="quick-create-button" type="button" onClick={openCreateDrawer}><Plus size={19} /><span>{t.create}</span></button>}
           </div>
         </header>
 
@@ -177,7 +178,7 @@ export function FlowDeskShell({ orgSlug, organizationName, displayName, role, in
         </main>
       </div>
 
-      {createOpen && <CreateWorkOrderDrawer onClose={() => setCreateOpen(false)} onCreated={showCreatedToast} />}
+      {createOpen && canManageWorkOrders && <CreateWorkOrderDrawer onClose={() => setCreateOpen(false)} onCreated={showCreatedToast} />}
 
       {searchOpen && (
         <div className="command-overlay" role="dialog" aria-modal="true" aria-label={t.search}>
@@ -187,8 +188,8 @@ export function FlowDeskShell({ orgSlug, organizationName, displayName, role, in
             <div className="command-results">
               <span className="command-group-label">{t.workOrders}</span>
               {searchResults.map((order) => <Link href={`/app/${orgSlug}/work-orders?selected=${order.id}`} key={order.id}><span className="command-result-icon"><BriefcaseBusiness size={17} /></span><span><strong>{order.number} · {order.client}</strong><small>{order.title[locale]}</small></span><span className="command-open"><Command size={13} /> ↵</span></Link>)}
-              <span className="command-group-label">{locale === "ru" ? "Быстрые действия" : "Quick actions"}</span>
-              <button type="button" onClick={() => { setSearchOpen(false); openCreateDrawer(); }}><span className="command-result-icon"><Plus size={17} /></span><span><strong>{t.newWorkOrder}</strong><small>{locale === "ru" ? "Создать новый операционный aggregate" : "Create a new operational aggregate"}</small></span></button>
+              {canManageWorkOrders && <><span className="command-group-label">{locale === "ru" ? "Быстрые действия" : "Quick actions"}</span>
+              <button type="button" onClick={() => { setSearchOpen(false); openCreateDrawer(); }}><span className="command-result-icon"><Plus size={17} /></span><span><strong>{t.newWorkOrder}</strong><small>{locale === "ru" ? "Создать новый операционный aggregate" : "Create a new operational aggregate"}</small></span></button></>}
             </div>
           </div>
         </div>
