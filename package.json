@@ -13,7 +13,9 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:seed": "tsx scripts/seed-admin.ts"
+    "db:bootstrap": "tsx scripts/bootstrap.ts",
+    "db:seed-demo": "tsx scripts/seed-demo.ts",
+    "admin:reset-password": "tsx scripts/reset-admin-password.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
@@ -27,6 +29,7 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.50.0",
+    "@electric-sql/pglite": "^0.5.4",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",

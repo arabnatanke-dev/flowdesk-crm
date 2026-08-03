@@ -22,3 +22,17 @@ export function getDb() {
 }
 
 export type FlowDeskDatabase = ReturnType<typeof getDb>;
+
+export function installDatabaseForTests(testDatabase: unknown): void {
+  // EN: Replace the singleton only in tests so services can run against an isolated PostgreSQL engine.
+  // RU: Заменяет singleton только в тестах для запуска сервисов на изолированном PostgreSQL engine.
+  if (process.env.NODE_ENV === "production") throw new Error("Test database injection is disabled in production.");
+  database = testDatabase as ReturnType<typeof createDatabase>;
+}
+
+export function resetDatabaseForTests(): void {
+  // EN: Clear the injected database after an isolated integration-test suite.
+  // RU: Очищает внедрённую БД после изолированного набора интеграционных тестов.
+  if (process.env.NODE_ENV === "production") throw new Error("Test database reset is disabled in production.");
+  database = null;
+}

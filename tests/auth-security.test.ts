@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createOpaqueToken, hashPassword, hashPrivateIdentifier, sha256Hex, verifyPassword } from "../src/server/security/crypto";
-import { canCreateWorkOrder, canTransitionWorkOrder, canUpdateSettings } from "../src/server/auth/permissions";
+import {
+  canAccessOfficeSection,
+  canCreateWorkOrder,
+  canReadAllWorkOrders,
+  canReadWorkOrders,
+  canTransitionWorkOrder,
+  canUpdateSettings,
+} from "../src/server/auth/permissions";
+import { getClientAddress } from "../src/server/http/api";
 
 test("hashes passwords with a random salt and verifies only the correct secret", async () => {
   const first = await hashPassword("correct horse battery staple");
@@ -30,4 +38,18 @@ test("enforces role capabilities for creation, field transitions and settings", 
   assert.equal(canTransitionWorkOrder("TECHNICIAN", "CLOSED"), false);
   assert.equal(canUpdateSettings("ADMIN"), true);
   assert.equal(canUpdateSettings("DISPATCHER"), false);
+  assert.equal(canReadAllWorkOrders("DISPATCHER"), true);
+  assert.equal(canReadAllWorkOrders("TECHNICIAN"), false);
+  assert.equal(canReadWorkOrders("ACCOUNTANT"), false);
+  assert.equal(canAccessOfficeSection("ACCOUNTANT", "finance"), true);
+  assert.equal(canAccessOfficeSection("ACCOUNTANT", "work-orders"), false);
+  assert.equal(canAccessOfficeSection("TECHNICIAN", "dashboard"), false);
+});
+
+test("uses only the configured trusted reverse-proxy address header", () => {
+  process.env.TRUSTED_PROXY_HEADER = "cf-connecting-ip";
+  const spoofed = new Request("https://flowdesk.example", { headers: { "x-forwarded-for": "198.51.100.10" } });
+  const trusted = new Request("https://flowdesk.example", { headers: { "cf-connecting-ip": "203.0.113.10", "x-forwarded-for": "198.51.100.10" } });
+  assert.equal(getClientAddress(spoofed), "unavailable");
+  assert.equal(getClientAddress(trusted), "203.0.113.10");
 });
