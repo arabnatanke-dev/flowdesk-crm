@@ -95,15 +95,21 @@ export const memberships = pgTable(
 export const sessions = pgTable(
   "sessions",
   {
-    tokenHash: varchar("token_hash", { length: 64 }).primaryKey(),
+    id: uuid("id").primaryKey().defaultRandom(),
+    tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
     userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+    rotatedAt: timestamp("rotated_at", { withTimezone: true }).notNull().defaultNow(),
     ipHash: varchar("ip_hash", { length: 64 }),
     userAgent: text("user_agent"),
   },
-  (table) => [index("sessions_user_idx").on(table.userId), index("sessions_expiry_idx").on(table.expiresAt)],
+  (table) => [
+    index("sessions_user_idx").on(table.userId),
+    index("sessions_expiry_idx").on(table.expiresAt),
+    index("sessions_last_seen_idx").on(table.lastSeenAt),
+  ],
 );
 
 export const organizationSequences = pgTable("organization_sequences", {

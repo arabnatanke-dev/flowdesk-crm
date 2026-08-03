@@ -23,11 +23,12 @@ export function assertSameOrigin(request: Request): void {
 }
 
 export function getClientAddress(request: Request): string {
-  // EN: Resolve the first proxy-provided address for privacy-preserving rate-limit hashing.
-  // RU: Определяет первый proxy-адрес для приватного хеширования rate-limit ключа.
-  return request.headers.get("cf-connecting-ip")
-    ?? request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
-    ?? "unknown";
+  // EN: Trust exactly one deployment-configured reverse-proxy header and never parse user-controlled forwarding chains.
+  // RU: Доверяет ровно одному настроенному заголовку reverse proxy и не разбирает пользовательские forwarding chains.
+  const configuredHeader = (process.env.TRUSTED_PROXY_HEADER ?? "cf-connecting-ip").toLowerCase();
+  const allowedHeaders = new Set(["cf-connecting-ip", "x-real-ip"]);
+  if (!allowedHeaders.has(configuredHeader)) throw new Error("TRUSTED_PROXY_HEADER must be cf-connecting-ip or x-real-ip.");
+  return request.headers.get(configuredHeader)?.trim() || "unavailable";
 }
 
 export function apiErrorResponse(error: unknown): NextResponse {

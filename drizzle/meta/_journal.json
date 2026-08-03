@@ -22,6 +22,20 @@
       "when": 1785764493370,
       "tag": "0002_nervous_scalphunter",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785768846864,
+      "tag": "0003_mighty_jetstream",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785769515978,
+      "tag": "0004_optimal_zodiak",
+      "breakpoints": true
     }
   ]
 }
