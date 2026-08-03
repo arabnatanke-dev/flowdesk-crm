@@ -1,38 +1,56 @@
 # FlowDesk CRM
 
-Интерактивный фундамент мультитенантной CRM для сервисных компаний по техническому заданию FlowDesk. Текущая версия реализует адаптивный RU/EN интерфейс и демонстрационный доменный поток заявок; production-бэкенд, постоянное хранилище, полноценная identity/tenancy модель и интеграции ещё не реализованы.
+**Version 0.1.1**
 
-Interactive foundation for the multi-tenant field-service CRM described in the FlowDesk specification. The current version provides a responsive RU/EN interface and a demo work-order domain flow; the production backend, persistent storage, complete identity/tenancy model, and integrations are not implemented yet.
+FlowDesk CRM is a bilingual field-service operations workspace for managing customers, work orders, dispatch, technicians, service catalogs, finance, and reporting from one responsive application.
 
-## Реализовано / Implemented
+[Open the live demo](https://flowdesk-crm-horizon.rosie-che-1327.chatgpt.site)
 
-- RU/EN localization with a shared language switch.
-- Login, dashboard, work orders, dispatch, clients, team, catalog, finance, reports, and settings.
-- Mobile technician route with work-order status transitions.
-- Responsive office and mobile layouts.
-- Strict TypeScript, ESLint, production build, and rendered HTML tests.
-- Sites deployment configuration in `.openai/hosting.json`.
-- English and Russian comments for named functions.
+## Features
 
-## Маршруты / Routes
+- Russian and English localization with a shared language switch.
+- Office dashboard with operational metrics, attention queue, schedule, and activity feed.
+- Work-order list, Kanban board, map view, details, priorities, and status transitions.
+- Dispatcher workspace with technician capacity and scheduling context.
+- Customer, team, service catalog, finance, reporting, and organization settings modules.
+- Responsive technician workspace with job actions, checklist, materials, photos, and time tracking.
+- Responsive layouts for desktop, tablet, and mobile screens.
+- Strict TypeScript, ESLint, production builds, and rendered HTML tests.
+- English and Russian documentation comments for named functions.
 
-- `/` — authentication demo.
+## Application Routes
+
+- `/` — workspace sign-in screen.
 - `/app/horizon/dashboard` — office dashboard.
-- `/app/horizon/work-orders` — work-order list, board, map, and details.
+- `/app/horizon/work-orders` — work-order workspace.
 - `/app/horizon/dispatch` — dispatcher workspace.
-- `/app/horizon/clients`, `/team`, `/catalog`, `/finance`, `/reports`, `/settings` — business modules under `/app/horizon`.
-- `/m/horizon` — technician mobile workspace.
+- `/app/horizon/clients` — customer database.
+- `/app/horizon/team` — team and availability.
+- `/app/horizon/catalog` — service catalog.
+- `/app/horizon/finance` — finance center.
+- `/app/horizon/reports` — reporting center.
+- `/app/horizon/settings` — organization settings.
+- `/m/horizon` — mobile technician workspace.
 
-## Локальный запуск / Local development
+## Technology
 
-Requires Node.js `>=22.13.0`.
+- Next.js-compatible App Router powered by Vinext.
+- React 19 and TypeScript.
+- Tailwind CSS and product-specific responsive styling.
+- Drizzle ORM foundation for future persistence.
+- Cloudflare Workers-compatible production output.
+- Sites deployment configuration in `.openai/hosting.json`.
+
+## Local Development
+
+Node.js `>=22.13.0` is required.
 
 ```bash
 npm install
 npm run dev
 ```
 
-## Проверка / Verification
+## Verification
 
 ```bash
 npm run lint
@@ -40,8 +58,8 @@ npx tsc --noEmit
 npm test
 ```
 
-`npm test` performs a production build and runs the rendered HTML checks.
+`npm test` creates a production build and runs the rendered HTML test suite.
 
-## Текущая стадия / Current stage
+## Release Status
 
-Roadmap stage 1, Foundation. The UI and frontend architecture are substantially established; production data, APIs, authentication, tenant isolation, observability, audit, security hardening, and CI/database verification remain future work.
+Version `0.1.1` establishes the FlowDesk CRM application foundation, bilingual product interface, primary office modules, and mobile technician experience.
