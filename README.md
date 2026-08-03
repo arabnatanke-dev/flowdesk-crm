@@ -8,16 +8,17 @@ FlowDesk CRM is a bilingual field-service CRM foundation for office operators an
 
 - Russian and English UI with document-language synchronization.
 - Password authentication using salted PBKDF2-HMAC-SHA-256 hashes.
-- Opaque server-side sessions with `HttpOnly`, `SameSite=Lax`, expiring cookies and logout revocation.
+- Rotating opaque server-side sessions with `__Host-`, `HttpOnly`, `Secure`, `SameSite=Lax`, absolute and idle expiry, cleanup, active-session listing and revocation.
 - Organizations, users and memberships with tenant access resolved from both the session user and URL `orgSlug`.
-- Role checks for work-order creation, status transitions and organization settings.
+- Read and write RBAC for office modules, work-order data, mobile assignments, status transitions and organization settings.
 - PostgreSQL/Neon persistence through Drizzle ORM and a committed SQL migration.
-- Tenant-scoped work-order reads and writes, collision-free organization sequences and optimistic versions.
-- Server-owned work-order state transitions with assignment/prerequisite checks and audit records.
+- Tenant-scoped work-order reads and writes, assigned-only technician reads, collision-free organization sequences and optimistic versions.
+- Server-owned work-order creation, content editing, assignment, scheduling and status transitions with prerequisite checks and transactional audit records.
 - Persisted organization locale, timezone, currency and tax settings with optimistic concurrency.
-- Login throttling, same-origin mutation checks and baseline browser security headers.
+- Atomic account/network login throttling, a configurable trusted-proxy address header, same-origin mutation checks and baseline browser security headers.
 - Responsive office and technician routes, including work-order deep links.
-- Unit tests for password security, permissions and work-order transition policy, plus production-build HTML tests.
+- Unit tests plus isolated PostgreSQL integration tests for tenant isolation, role reads, session expiry/revocation/rotation, parallel throttling, workflow commands, stale versions and audit commits.
+- GitHub Actions checks for dependency audit, lint, TypeScript, migration drift, production build and all tests.
 - English and Russian comments inside named functions.
 
 ## Foundation / preview modules
@@ -40,7 +41,13 @@ Password recovery, email delivery, MFA, member invitations and a production back
 - `/app/:orgSlug/settings` — persisted organization settings.
 - `/m/:orgSlug` — protected mobile technician workspace.
 
-All `/app/*`, `/m/*` and organization API routes require an active session and an active membership in the requested organization.
+All `/app/*`, `/m/*` and organization API routes require an active session and an active membership in the requested organization. Office navigation and route access are role-specific:
+
+- `OWNER` / `ADMIN` — all office work-order reads and commands.
+- `DISPATCHER` — operational modules and all organization work orders.
+- `TECHNICIAN` — mobile workspace and only work orders assigned to that user.
+- `ACCOUNTANT` — finance and reporting modules; no operational work-order endpoint.
+- `VIEWER` — explicitly allowed reporting module only; no work-order endpoint or mutations.
 
 ## Technology
 
@@ -57,22 +64,34 @@ npm install
 cp .env.example .env
 ```
 
-Edit `.env` with a real PostgreSQL/Neon connection string, a random `SECURITY_PEPPER` of at least 32 characters and a strong seed password. Never commit `.env`.
+Edit `.env` with a real PostgreSQL/Neon connection string, a random `SECURITY_PEPPER` of at least 32 characters, the exact trusted proxy header and a strong bootstrap password. Never commit `.env`.
 
 ```bash
 npm run db:migrate
-npm run db:seed
+npm run db:bootstrap
 npm run dev
 ```
 
-The seed command is idempotent. It creates or updates the configured owner account and organization. The login screen intentionally contains no public default password; use the values you set in `.env`.
+`db:bootstrap` creates missing organization, owner and membership records but never changes an existing password or reactivates an existing account. The login screen intentionally contains no public default password; use the values you set in `.env`.
+
+Optional demonstration records are isolated behind a separate command:
+
+```bash
+npm run db:seed-demo
+```
+
+An administrator password changes only through the explicit reset command, which also revokes that user's sessions:
+
+```bash
+npm run admin:reset-password
+```
 
 ## Deployment
 
 1. Create an empty PostgreSQL/Neon database.
-2. Configure `DATABASE_URL` and `SECURITY_PEPPER` in the server environment.
+2. Configure `DATABASE_URL`, `SECURITY_PEPPER` and `TRUSTED_PROXY_HEADER` in the server environment.
 3. Run `npm run db:migrate` against that database.
-4. Set the `SEED_*` variables and run `npm run db:seed` once from a trusted deployment environment.
+4. Set the `SEED_*` variables and run `npm run db:bootstrap` once from a trusted deployment environment.
 5. Build and deploy with `npm run build` using a host that supports the generated Vinext/Cloudflare output and server environment variables.
 
 Rotate or remove seed credentials from the deployment environment after provisioning. TLS must terminate before the application in production so the session cookie is sent only over HTTPS.
@@ -86,7 +105,7 @@ npm test
 npm audit
 ```
 
-`npm test` creates a production build, runs rendered HTML checks and executes the security/domain unit tests.
+`npm test` creates a production build and runs rendered HTML, security/domain and PostgreSQL integration tests. The integration suite uses an isolated PGlite PostgreSQL engine and applies the committed migration chain from an empty database.
 
 ## Release status
 
