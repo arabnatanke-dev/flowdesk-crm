@@ -8,7 +8,7 @@ FlowDesk CRM is a bilingual field-service CRM foundation for office operators an
 
 - Russian and English UI with document-language synchronization.
 - Password authentication using salted PBKDF2-HMAC-SHA-256 hashes.
-- Rotating opaque server-side sessions with `__Host-`, `HttpOnly`, `Secure`, `SameSite=Lax`, absolute and idle expiry, cleanup, active-session listing and revocation.
+- Rotating opaque server-side sessions with a 60-second concurrent-request grace period, `__Host-`, `HttpOnly`, `Secure`, `SameSite=Lax`, absolute and idle expiry, cleanup, active-session listing and revocation.
 - Organizations, users and memberships with tenant access resolved from both the session user and URL `orgSlug`.
 - Read and write RBAC for office modules, work-order data, mobile assignments, status transitions and organization settings.
 - PostgreSQL/Neon persistence through Drizzle ORM and a committed SQL migration.
@@ -89,7 +89,7 @@ npm run admin:reset-password
 ## Deployment
 
 1. Create an empty PostgreSQL/Neon database.
-2. Configure `DATABASE_URL`, `SECURITY_PEPPER` and `TRUSTED_PROXY_HEADER` in the server environment.
+2. Configure `DATABASE_URL`, `SECURITY_PEPPER` and `TRUSTED_PROXY_HEADER` in the server environment. Production requests fail closed when the variable or its configured proxy header is missing.
 3. Run `npm run db:migrate` against that database.
 4. Set the `SEED_*` variables and run `npm run db:bootstrap` once from a trusted deployment environment.
 5. Build and deploy with `npm run build` using a host that supports the generated Vinext/Cloudflare output and server environment variables.

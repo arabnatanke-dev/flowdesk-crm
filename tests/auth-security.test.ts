@@ -47,9 +47,39 @@ test("enforces role capabilities for creation, field transitions and settings", 
 });
 
 test("uses only the configured trusted reverse-proxy address header", () => {
-  process.env.TRUSTED_PROXY_HEADER = "cf-connecting-ip";
-  const spoofed = new Request("https://flowdesk.example", { headers: { "x-forwarded-for": "198.51.100.10" } });
-  const trusted = new Request("https://flowdesk.example", { headers: { "cf-connecting-ip": "203.0.113.10", "x-forwarded-for": "198.51.100.10" } });
-  assert.equal(getClientAddress(spoofed), "unavailable");
-  assert.equal(getClientAddress(trusted), "203.0.113.10");
+  const originalHeader = process.env.TRUSTED_PROXY_HEADER;
+  try {
+    process.env.TRUSTED_PROXY_HEADER = "cf-connecting-ip";
+    const spoofed = new Request("https://flowdesk.example", { headers: { "x-forwarded-for": "198.51.100.10" } });
+    const trusted = new Request("https://flowdesk.example", { headers: { "cf-connecting-ip": "203.0.113.10", "x-forwarded-for": "198.51.100.10" } });
+    assert.equal(getClientAddress(spoofed), "unavailable");
+    assert.equal(getClientAddress(trusted), "203.0.113.10");
+  } finally {
+    if (originalHeader === undefined) delete process.env.TRUSTED_PROXY_HEADER;
+    else process.env.TRUSTED_PROXY_HEADER = originalHeader;
+  }
+});
+
+test("fails closed when trusted proxy identity is missing in production", () => {
+  const originalHeader = process.env.TRUSTED_PROXY_HEADER;
+  const originalNodeEnvironment = process.env.NODE_ENV;
+  try {
+    Object.defineProperty(process.env, "NODE_ENV", { value: "production", configurable: true, enumerable: true, writable: true });
+    delete process.env.TRUSTED_PROXY_HEADER;
+    assert.throws(
+      () => getClientAddress(new Request("https://flowdesk.example")),
+      /TRUSTED_PROXY_HEADER is required in production/,
+    );
+
+    process.env.TRUSTED_PROXY_HEADER = "cf-connecting-ip";
+    assert.throws(
+      () => getClientAddress(new Request("https://flowdesk.example")),
+      /Trusted proxy header cf-connecting-ip is missing/,
+    );
+  } finally {
+    if (originalHeader === undefined) delete process.env.TRUSTED_PROXY_HEADER;
+    else process.env.TRUSTED_PROXY_HEADER = originalHeader;
+    if (originalNodeEnvironment === undefined) Reflect.deleteProperty(process.env, "NODE_ENV");
+    else Object.defineProperty(process.env, "NODE_ENV", { value: originalNodeEnvironment, configurable: true, enumerable: true, writable: true });
+  }
 });

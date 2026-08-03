@@ -36,6 +36,13 @@
       "when": 1785769515978,
       "tag": "0004_optimal_zodiak",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785771605499,
+      "tag": "0005_bored_dakota_north",
+      "breakpoints": true
     }
   ]
 }

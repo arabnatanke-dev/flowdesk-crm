@@ -10,6 +10,7 @@ const SHORT_SESSION_MILLISECONDS = 12 * 60 * 60 * 1000;
 const REMEMBERED_SESSION_MILLISECONDS = 30 * 24 * 60 * 60 * 1000;
 const IDLE_TIMEOUT_MILLISECONDS = 30 * 60 * 1000;
 const ROTATION_INTERVAL_MILLISECONDS = 15 * 60 * 1000;
+const ROTATION_GRACE_MILLISECONDS = 60 * 1000;
 
 export type SessionIdentity = {
   sessionId: string;
@@ -68,7 +69,13 @@ export async function createSession(userId: string, remember: boolean, request: 
   const ipHash = await hashPrivateIdentifier(getClientAddress(request));
   const cookieStore = await cookies();
   const previousToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-  if (previousToken) await getDb().delete(sessions).where(eq(sessions.tokenHash, await sha256Hex(previousToken)));
+  if (previousToken) {
+    const previousTokenHash = await sha256Hex(previousToken);
+    await getDb().delete(sessions).where(or(
+      eq(sessions.tokenHash, previousTokenHash),
+      and(eq(sessions.previousTokenHash, previousTokenHash), gt(sessions.previousTokenValidUntil, now)),
+    ));
+  }
   await getDb().insert(sessions).values({
     tokenHash,
     userId,
@@ -83,8 +90,8 @@ export async function createSession(userId: string, remember: boolean, request: 
 }
 
 export async function resolveSessionToken(token: string, allowRotation = true): Promise<ResolvedSession | null> {
-  // EN: Enforce absolute and idle expiry, clean stale records, and rotate long-lived opaque tokens.
-  // RU: Проверяет абсолютный и idle expiry, очищает устаревшие записи и ротирует долгоживущие opaque-токены.
+  // EN: Enforce expiry and rotate tokens while accepting the previous digest briefly for concurrent requests.
+  // RU: Проверяет expiry и ротирует токены, кратко принимая предыдущий digest для конкурентных запросов.
   const now = new Date();
   const idleCutoff = new Date(now.getTime() - IDLE_TIMEOUT_MILLISECONDS);
   const tokenHash = await sha256Hex(token);
@@ -93,6 +100,7 @@ export async function resolveSessionToken(token: string, allowRotation = true): 
     .select({
       sessionId: sessions.id,
       tokenHash: sessions.tokenHash,
+      previousTokenHash: sessions.previousTokenHash,
       userId: users.id,
       email: users.email,
       displayName: users.displayName,
@@ -102,7 +110,10 @@ export async function resolveSessionToken(token: string, allowRotation = true): 
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))
     .where(and(
-      eq(sessions.tokenHash, tokenHash),
+      or(
+        eq(sessions.tokenHash, tokenHash),
+        and(eq(sessions.previousTokenHash, tokenHash), gt(sessions.previousTokenValidUntil, now)),
+      ),
       gt(sessions.expiresAt, now),
       gt(sessions.lastSeenAt, idleCutoff),
       eq(users.isActive, true),
@@ -111,11 +122,16 @@ export async function resolveSessionToken(token: string, allowRotation = true): 
   if (!record) return null;
 
   let rotatedToken: string | null = null;
-  const shouldRotate = allowRotation && now.getTime() - record.rotatedAt.getTime() >= ROTATION_INTERVAL_MILLISECONDS;
+  const matchedPreviousToken = record.tokenHash !== tokenHash && record.previousTokenHash === tokenHash;
+  const shouldRotate = allowRotation
+    && !matchedPreviousToken
+    && now.getTime() - record.rotatedAt.getTime() >= ROTATION_INTERVAL_MILLISECONDS;
   if (shouldRotate) {
     const candidateToken = createOpaqueToken();
     const [rotated] = await getDb().update(sessions).set({
       tokenHash: await sha256Hex(candidateToken),
+      previousTokenHash: record.tokenHash,
+      previousTokenValidUntil: new Date(now.getTime() + ROTATION_GRACE_MILLISECONDS),
       rotatedAt: now,
       lastSeenAt: now,
     }).where(and(eq(sessions.id, record.sessionId), eq(sessions.tokenHash, record.tokenHash))).returning({ id: sessions.id });
@@ -169,6 +185,8 @@ export async function listActiveSessions(): Promise<ActiveSession[]> {
   const records = await getDb().select({
     id: sessions.id,
     tokenHash: sessions.tokenHash,
+    previousTokenHash: sessions.previousTokenHash,
+    previousTokenValidUntil: sessions.previousTokenValidUntil,
     createdAt: sessions.createdAt,
     lastSeenAt: sessions.lastSeenAt,
     expiresAt: sessions.expiresAt,
@@ -184,7 +202,8 @@ export async function listActiveSessions(): Promise<ActiveSession[]> {
     lastSeenAt: record.lastSeenAt,
     expiresAt: record.expiresAt,
     userAgent: record.userAgent,
-    isCurrent: record.tokenHash === currentHash,
+    isCurrent: record.tokenHash === currentHash
+      || (record.previousTokenHash === currentHash && Boolean(record.previousTokenValidUntil && record.previousTokenValidUntil > now)),
   }));
 }
 
@@ -193,7 +212,14 @@ export async function destroySession(): Promise<void> {
   // RU: Отзывает текущую серверную сессию до удаления её browser-cookie.
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-  if (token) await getDb().delete(sessions).where(eq(sessions.tokenHash, await sha256Hex(token)));
+  if (token) {
+    const tokenHash = await sha256Hex(token);
+    const now = new Date();
+    await getDb().delete(sessions).where(or(
+      eq(sessions.tokenHash, tokenHash),
+      and(eq(sessions.previousTokenHash, tokenHash), gt(sessions.previousTokenValidUntil, now)),
+    ));
+  }
   await clearSessionCookie();
 }
 

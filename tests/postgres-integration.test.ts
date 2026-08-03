@@ -213,7 +213,7 @@ test("expired and revoked sessions both resolve as unauthenticated", async () =>
   await assert.rejects(() => requireSessionToken(revokedToken), (error: unknown) => error instanceof ApiError && error.status === 401);
 });
 
-test("idle sessions expire and old opaque tokens stop working after rotation", async () => {
+test("idle sessions expire and parallel rotation accepts the previous token only during grace", async () => {
   const idleToken = "idle-integration-token";
   await database.insert(sessions).values({
     tokenHash: await sha256Hex(idleToken),
@@ -230,10 +230,23 @@ test("idle sessions expire and old opaque tokens stop working after rotation", a
     expiresAt: new Date(Date.now() + 60_000),
     rotatedAt: new Date(Date.now() - 16 * 60 * 1000),
   });
-  const rotated = await resolveSessionToken(oldToken, true);
-  assert.ok(rotated?.rotatedToken);
+  const parallelResults = await Promise.all([
+    resolveSessionToken(oldToken, true),
+    resolveSessionToken(oldToken, true),
+  ]);
+  assert.equal(parallelResults.every((result) => result?.identity.userId === ids.owner), true);
+  const rotatedTokens = parallelResults.flatMap((result) => result?.rotatedToken ? [result.rotatedToken] : []);
+  assert.equal(rotatedTokens.length, 1);
+
+  const graceResult = await resolveSessionToken(oldToken, true);
+  assert.equal(graceResult?.identity.userId, ids.owner);
+  assert.equal(graceResult?.rotatedToken, null);
+  assert.equal((await requireSessionToken(rotatedTokens[0])).userId, ids.owner);
+
+  await database.update(sessions).set({ previousTokenValidUntil: new Date(Date.now() - 1_000) })
+    .where(eq(sessions.tokenHash, await sha256Hex(rotatedTokens[0])));
   assert.equal(await resolveSessionToken(oldToken, false), null);
-  assert.equal((await requireSessionToken(rotated.rotatedToken)).userId, ids.owner);
+  assert.equal((await requireSessionToken(rotatedTokens[0])).userId, ids.owner);
 });
 
 test("parallel login failures atomically block the account bucket", async () => {

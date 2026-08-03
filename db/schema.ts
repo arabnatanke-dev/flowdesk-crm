@@ -97,6 +97,8 @@ export const sessions = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+    previousTokenHash: varchar("previous_token_hash", { length: 64 }),
+    previousTokenValidUntil: timestamp("previous_token_valid_until", { withTimezone: true }),
     userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -109,6 +111,7 @@ export const sessions = pgTable(
     index("sessions_user_idx").on(table.userId),
     index("sessions_expiry_idx").on(table.expiresAt),
     index("sessions_last_seen_idx").on(table.lastSeenAt),
+    index("sessions_previous_token_idx").on(table.previousTokenHash),
   ],
 );
 
