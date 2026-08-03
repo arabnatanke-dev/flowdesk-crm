@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { withRequestDatabase } from "@/db";
 import { requireTenantApiContext } from "@/src/server/auth/tenant";
 import { apiErrorResponse, assertSameOrigin, getClientAddress } from "@/src/server/http/api";
 import { hashPrivateIdentifier } from "@/src/server/security/crypto";
@@ -21,20 +22,23 @@ export async function PATCH(
   // EN: Validate and execute one tenant-scoped work-order content update.
   // RU: Валидирует и выполняет одно tenant-scoped обновление содержимого заявки.
   try {
-    assertSameOrigin(request);
-    const { orgSlug, workOrderId } = await params;
-    const context = await requireTenantApiContext(orgSlug);
-    const parsed = updateSchema.safeParse(await request.json());
-    if (!parsed.success) return NextResponse.json({ error: { code: "INVALID_WORK_ORDER", message: "Check the work-order fields.", details: parsed.error.flatten() } }, { status: 400 });
-    const { expectedVersion, ...input } = parsed.data;
-    return NextResponse.json({
-      workOrder: await updateWorkOrder(
-        context,
-        workOrderId,
-        input,
-        expectedVersion,
-        await hashPrivateIdentifier(getClientAddress(request)),
-      ),
+    return await withRequestDatabase(async (database) => {
+      assertSameOrigin(request);
+      const { orgSlug, workOrderId } = await params;
+      const context = await requireTenantApiContext(database, orgSlug);
+      const parsed = updateSchema.safeParse(await request.json());
+      if (!parsed.success) return NextResponse.json({ error: { code: "INVALID_WORK_ORDER", message: "Check the work-order fields.", details: parsed.error.flatten() } }, { status: 400 });
+      const { expectedVersion, ...input } = parsed.data;
+      return NextResponse.json({
+        workOrder: await updateWorkOrder(
+          database,
+          context,
+          workOrderId,
+          input,
+          expectedVersion,
+          await hashPrivateIdentifier(getClientAddress(request)),
+        ),
+      });
     });
   } catch (error) {
     return apiErrorResponse(error);

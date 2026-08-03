@@ -1,6 +1,6 @@
 import { and, eq, gt, lt, or } from "drizzle-orm";
 import { cookies } from "next/headers";
-import { getDb } from "@/db";
+import type { FlowDeskDatabase } from "@/db";
 import { sessions, users } from "@/db/schema";
 import { createOpaqueToken, hashPrivateIdentifier, sha256Hex } from "@/src/server/security/crypto";
 import { ApiError, getClientAddress } from "@/src/server/http/api";
@@ -59,7 +59,7 @@ async function clearSessionCookie(): Promise<void> {
   });
 }
 
-export async function createSession(userId: string, remember: boolean, request: Request): Promise<void> {
+export async function createSession(database: FlowDeskDatabase, userId: string, remember: boolean, request: Request): Promise<void> {
   // EN: Persist an opaque session digest and send the raw token only through a protected host cookie.
   // RU: Сохраняет digest непрозрачной сессии, а исходный токен передаёт только в защищённой host-cookie.
   const token = createOpaqueToken();
@@ -71,12 +71,12 @@ export async function createSession(userId: string, remember: boolean, request: 
   const previousToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   if (previousToken) {
     const previousTokenHash = await sha256Hex(previousToken);
-    await getDb().delete(sessions).where(or(
+    await database.delete(sessions).where(or(
       eq(sessions.tokenHash, previousTokenHash),
       and(eq(sessions.previousTokenHash, previousTokenHash), gt(sessions.previousTokenValidUntil, now)),
     ));
   }
-  await getDb().insert(sessions).values({
+  await database.insert(sessions).values({
     tokenHash,
     userId,
     expiresAt,
@@ -89,14 +89,14 @@ export async function createSession(userId: string, remember: boolean, request: 
   await setSessionCookie(token, expiresAt);
 }
 
-export async function resolveSessionToken(token: string, allowRotation = true): Promise<ResolvedSession | null> {
+export async function resolveSessionToken(database: FlowDeskDatabase, token: string, allowRotation = true): Promise<ResolvedSession | null> {
   // EN: Enforce expiry and rotate tokens while accepting the previous digest briefly for concurrent requests.
   // RU: Проверяет expiry и ротирует токены, кратко принимая предыдущий digest для конкурентных запросов.
   const now = new Date();
   const idleCutoff = new Date(now.getTime() - IDLE_TIMEOUT_MILLISECONDS);
   const tokenHash = await sha256Hex(token);
-  await getDb().delete(sessions).where(or(lt(sessions.expiresAt, now), lt(sessions.lastSeenAt, idleCutoff)));
-  const [record] = await getDb()
+  await database.delete(sessions).where(or(lt(sessions.expiresAt, now), lt(sessions.lastSeenAt, idleCutoff)));
+  const [record] = await database
     .select({
       sessionId: sessions.id,
       tokenHash: sessions.tokenHash,
@@ -128,7 +128,7 @@ export async function resolveSessionToken(token: string, allowRotation = true): 
     && now.getTime() - record.rotatedAt.getTime() >= ROTATION_INTERVAL_MILLISECONDS;
   if (shouldRotate) {
     const candidateToken = createOpaqueToken();
-    const [rotated] = await getDb().update(sessions).set({
+    const [rotated] = await database.update(sessions).set({
       tokenHash: await sha256Hex(candidateToken),
       previousTokenHash: record.tokenHash,
       previousTokenValidUntil: new Date(now.getTime() + ROTATION_GRACE_MILLISECONDS),
@@ -137,7 +137,7 @@ export async function resolveSessionToken(token: string, allowRotation = true): 
     }).where(and(eq(sessions.id, record.sessionId), eq(sessions.tokenHash, record.tokenHash))).returning({ id: sessions.id });
     if (rotated) rotatedToken = candidateToken;
   } else {
-    await getDb().update(sessions).set({ lastSeenAt: now }).where(eq(sessions.id, record.sessionId));
+    await database.update(sessions).set({ lastSeenAt: now }).where(eq(sessions.id, record.sessionId));
   }
   return {
     identity: {
@@ -151,20 +151,29 @@ export async function resolveSessionToken(token: string, allowRotation = true): 
   };
 }
 
-export async function requireSessionToken(token: string): Promise<SessionIdentity> {
+export async function requireSessionToken(database: FlowDeskDatabase, token: string): Promise<SessionIdentity> {
   // EN: Convert an expired or revoked opaque token to the same non-enumerating 401 contract.
   // RU: Преобразует expired или revoked opaque-токен в единый нераскрывающий 401-контракт.
-  const resolved = await resolveSessionToken(token, false);
+  const resolved = await resolveSessionToken(database, token, false);
   if (!resolved) throw new ApiError(401, "AUTH_REQUIRED", "Authentication is required.");
   return resolved.identity;
 }
 
-export async function getSessionIdentity(): Promise<SessionIdentity | null> {
-  // EN: Resolve the current browser cookie and persist a rotated token when required.
-  // RU: Проверяет текущую browser-cookie и сохраняет ротированный токен при необходимости.
+export async function getSessionIdentity(database: FlowDeskDatabase): Promise<SessionIdentity | null> {
+  // EN: Resolve a session during server rendering without rotating or clearing its browser cookie.
+  // RU: Проверяет сессию во время server render без ротации или очистки browser-cookie.
   const token = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
   if (!token) return null;
-  const resolved = await resolveSessionToken(token);
+  const resolved = await resolveSessionToken(database, token, false);
+  return resolved?.identity ?? null;
+}
+
+export async function getRouteSessionIdentity(database: FlowDeskDatabase): Promise<SessionIdentity | null> {
+  // EN: Rotate or clear a session cookie only from a Route Handler mutation-capable context.
+  // RU: Ротирует или очищает session-cookie только из Route Handler, где разрешена cookie mutation.
+  const token = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
+  if (!token) return null;
+  const resolved = await resolveSessionToken(database, token, true);
   if (!resolved) {
     await clearSessionCookie();
     return null;
@@ -173,16 +182,16 @@ export async function getSessionIdentity(): Promise<SessionIdentity | null> {
   return resolved.identity;
 }
 
-export async function listActiveSessions(): Promise<ActiveSession[]> {
+export async function listActiveSessions(database: FlowDeskDatabase): Promise<ActiveSession[]> {
   // EN: List non-expired sessions for the authenticated user without exposing token digests.
   // RU: Возвращает неистёкшие сессии авторизованного пользователя без раскрытия token digests.
-  const identity = await getSessionIdentity();
+  const identity = await getRouteSessionIdentity(database);
   const currentToken = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
   if (!identity || !currentToken) return [];
   const currentHash = await sha256Hex(currentToken);
   const now = new Date();
   const idleCutoff = new Date(now.getTime() - IDLE_TIMEOUT_MILLISECONDS);
-  const records = await getDb().select({
+  const records = await database.select({
     id: sessions.id,
     tokenHash: sessions.tokenHash,
     previousTokenHash: sessions.previousTokenHash,
@@ -207,7 +216,7 @@ export async function listActiveSessions(): Promise<ActiveSession[]> {
   }));
 }
 
-export async function destroySession(): Promise<void> {
+export async function destroySession(database: FlowDeskDatabase): Promise<void> {
   // EN: Revoke the current server session before clearing its browser cookie.
   // RU: Отзывает текущую серверную сессию до удаления её browser-cookie.
   const cookieStore = await cookies();
@@ -215,7 +224,7 @@ export async function destroySession(): Promise<void> {
   if (token) {
     const tokenHash = await sha256Hex(token);
     const now = new Date();
-    await getDb().delete(sessions).where(or(
+    await database.delete(sessions).where(or(
       eq(sessions.tokenHash, tokenHash),
       and(eq(sessions.previousTokenHash, tokenHash), gt(sessions.previousTokenValidUntil, now)),
     ));
@@ -223,12 +232,12 @@ export async function destroySession(): Promise<void> {
   await clearSessionCookie();
 }
 
-export async function destroyAllSessions(): Promise<boolean> {
+export async function destroyAllSessions(database: FlowDeskDatabase): Promise<boolean> {
   // EN: Revoke every session owned by the current authenticated user and clear the current cookie.
   // RU: Отзывает все сессии текущего авторизованного пользователя и удаляет текущую cookie.
-  const identity = await getSessionIdentity();
+  const identity = await getRouteSessionIdentity(database);
   if (!identity) return false;
-  await getDb().delete(sessions).where(eq(sessions.userId, identity.userId));
+  await database.delete(sessions).where(eq(sessions.userId, identity.userId));
   await clearSessionCookie();
   return true;
 }

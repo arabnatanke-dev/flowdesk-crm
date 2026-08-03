@@ -1,5 +1,5 @@
 import { and, desc, eq, sql } from "drizzle-orm";
-import { getDb } from "@/db";
+import type { FlowDeskDatabase } from "@/db";
 import { auditLogs, memberships, organizationSequences, users, workOrders } from "@/db/schema";
 import { canTransition } from "@/src/modules/work-orders/domain/state-machine";
 import type {
@@ -63,14 +63,14 @@ export function serializeWorkOrder(row: WorkOrderRow, technician: TechnicianOpti
   };
 }
 
-export async function listWorkOrders(context: TenantContext): Promise<WorkOrder[]> {
+export async function listWorkOrders(database: FlowDeskDatabase, context: TenantContext): Promise<WorkOrder[]> {
   // EN: Read work orders only by the organization id proven by the current membership.
   // RU: Читает заявки только по organization id, подтверждённому текущим членством.
   if (!canReadWorkOrders(context.role)) throw new ApiError(403, "READ_FORBIDDEN", "Your role cannot read operational work orders.");
   const scope = canReadAllWorkOrders(context.role)
     ? eq(workOrders.organizationId, context.organization.id)
     : and(eq(workOrders.organizationId, context.organization.id), eq(workOrders.technicianId, context.session.userId));
-  const rows = await getDb()
+  const rows = await database
     .select({ workOrder: workOrders, technicianId: users.id, technicianName: users.displayName })
     .from(workOrders)
     .leftJoin(users, eq(users.id, workOrders.technicianId))
@@ -84,11 +84,11 @@ export async function listWorkOrders(context: TenantContext): Promise<WorkOrder[
   ));
 }
 
-export async function listAssignableTechnicians(context: TenantContext): Promise<TechnicianOption[]> {
+export async function listAssignableTechnicians(database: FlowDeskDatabase, context: TenantContext): Promise<TechnicianOption[]> {
   // EN: List active technician memberships only inside the already authorized organization.
   // RU: Возвращает только активные technician-memberships внутри уже авторизованной организации.
   if (!canReadAllWorkOrders(context.role)) return [];
-  return getDb()
+  return database
     .select({ id: users.id, displayName: users.displayName })
     .from(memberships)
     .innerJoin(users, eq(users.id, memberships.userId))
@@ -102,6 +102,7 @@ export async function listAssignableTechnicians(context: TenantContext): Promise
 }
 
 export async function createWorkOrder(
+  database: FlowDeskDatabase,
   context: TenantContext,
   input: NewWorkOrderInput,
   ipHash: string | null,
@@ -111,7 +112,7 @@ export async function createWorkOrder(
   if (!canCreateWorkOrder(context.role)) throw new ApiError(403, "ROLE_FORBIDDEN", "Your role cannot create work orders.");
   const scheduledStart = input.scheduledStart ? new Date(input.scheduledStart) : null;
   const scheduledEnd = scheduledStart ? new Date(scheduledStart.getTime() + 90 * 60 * 1000) : null;
-  return getDb().transaction(async (transaction) => {
+  return database.transaction(async (transaction) => {
     // EN: Keep sequence allocation, aggregate insertion and its audit record in one database transaction.
     // RU: Выполняет выдачу номера, вставку агрегата и audit-запись в одной транзакции БД.
     const [sequence] = await transaction
@@ -183,6 +184,7 @@ export function assertWorkOrderTransitionAllowed(
 }
 
 export async function transitionWorkOrder(
+  database: FlowDeskDatabase,
   context: TenantContext,
   workOrderId: string,
   nextStatus: WorkOrderStatus,
@@ -191,7 +193,7 @@ export async function transitionWorkOrder(
 ): Promise<WorkOrder> {
   // EN: Validate tenant, role, state, prerequisites and optimistic version before the atomic update.
   // RU: Проверяет tenant, роль, состояние, prerequisites и optimistic version до атомарного обновления.
-  return getDb().transaction(async (transaction) => {
+  return database.transaction(async (transaction) => {
     // EN: Commit the guarded state change and audit trail atomically.
     // RU: Атомарно фиксирует защищённый переход состояния и audit trail.
     const [current] = await transaction.select().from(workOrders).where(and(
@@ -232,6 +234,7 @@ export async function transitionWorkOrder(
 }
 
 export async function updateWorkOrder(
+  database: FlowDeskDatabase,
   context: TenantContext,
   workOrderId: string,
   input: UpdateWorkOrderInput,
@@ -241,7 +244,7 @@ export async function updateWorkOrder(
   // EN: Update editable work-order content with tenant scope, role policy, version control and audit.
   // RU: Обновляет содержимое заявки с tenant-scope, role-policy, version control и audit.
   if (!canCreateWorkOrder(context.role)) throw new ApiError(403, "ROLE_FORBIDDEN", "Your role cannot edit work orders.");
-  return getDb().transaction(async (transaction) => {
+  return database.transaction(async (transaction) => {
     // EN: Keep the content update and its audit record in one transaction.
     // RU: Выполняет обновление содержимого и audit-запись в одной транзакции.
     const [current] = await transaction.select().from(workOrders).where(and(
@@ -285,6 +288,7 @@ export async function updateWorkOrder(
 }
 
 export async function assignWorkOrder(
+  database: FlowDeskDatabase,
   context: TenantContext,
   workOrderId: string,
   technicianId: string | null,
@@ -294,7 +298,7 @@ export async function assignWorkOrder(
   // EN: Assign only an active technician membership from the same tenant with optimistic concurrency.
   // RU: Назначает только активного техника того же tenant с optimistic concurrency.
   if (!canCreateWorkOrder(context.role)) throw new ApiError(403, "ROLE_FORBIDDEN", "Your role cannot assign work orders.");
-  return getDb().transaction(async (transaction) => {
+  return database.transaction(async (transaction) => {
     // EN: Validate membership and commit assignment plus audit atomically.
     // RU: Проверяет membership и атомарно фиксирует назначение вместе с audit.
     const [current] = await transaction.select().from(workOrders).where(and(
@@ -348,6 +352,7 @@ export async function assignWorkOrder(
 }
 
 export async function scheduleWorkOrder(
+  database: FlowDeskDatabase,
   context: TenantContext,
   workOrderId: string,
   input: ScheduleWorkOrderInput,
@@ -360,7 +365,7 @@ export async function scheduleWorkOrder(
   const scheduledStart = new Date(input.scheduledStart);
   const scheduledEnd = new Date(input.scheduledEnd);
   if (scheduledEnd <= scheduledStart) throw new ApiError(422, "INVALID_SCHEDULE", "The schedule end must be after its start.");
-  return getDb().transaction(async (transaction) => {
+  return database.transaction(async (transaction) => {
     // EN: Commit schedule, version increment and audit record atomically.
     // RU: Атомарно фиксирует расписание, увеличение версии и audit-запись.
     const [current] = await transaction.select().from(workOrders).where(and(

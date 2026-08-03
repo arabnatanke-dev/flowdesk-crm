@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { withRequestDatabase } from "@/db";
 import { requireTenantApiContext } from "@/src/server/auth/tenant";
 import { apiErrorResponse, assertSameOrigin, getClientAddress } from "@/src/server/http/api";
 import { hashPrivateIdentifier } from "@/src/server/security/crypto";
@@ -20,14 +21,16 @@ export async function POST(
   // EN: Execute one server-authorized and version-checked work-order state transition.
   // RU: Выполняет один серверно разрешённый и version-проверенный переход статуса заявки.
   try {
-    assertSameOrigin(request);
-    const { orgSlug, workOrderId } = await params;
-    const context = await requireTenantApiContext(orgSlug);
-    const parsed = transitionSchema.safeParse(await request.json());
-    if (!parsed.success) return NextResponse.json({ error: { code: "INVALID_TRANSITION_INPUT", message: "Check the transition fields.", details: parsed.error.flatten() } }, { status: 400 });
-    const ipHash = await hashPrivateIdentifier(getClientAddress(request));
-    return NextResponse.json({
-      workOrder: await transitionWorkOrder(context, workOrderId, parsed.data.to, parsed.data.expectedVersion, ipHash),
+    return await withRequestDatabase(async (database) => {
+      assertSameOrigin(request);
+      const { orgSlug, workOrderId } = await params;
+      const context = await requireTenantApiContext(database, orgSlug);
+      const parsed = transitionSchema.safeParse(await request.json());
+      if (!parsed.success) return NextResponse.json({ error: { code: "INVALID_TRANSITION_INPUT", message: "Check the transition fields.", details: parsed.error.flatten() } }, { status: 400 });
+      const ipHash = await hashPrivateIdentifier(getClientAddress(request));
+      return NextResponse.json({
+        workOrder: await transitionWorkOrder(database, context, workOrderId, parsed.data.to, parsed.data.expectedVersion, ipHash),
+      });
     });
   } catch (error) {
     return apiErrorResponse(error);

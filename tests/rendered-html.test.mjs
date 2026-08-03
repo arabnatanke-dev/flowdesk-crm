@@ -10,11 +10,18 @@ async function render(pathname = "/") {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}-${pathname}`);
   const { default: worker } = await import(workerUrl.href);
-  return worker.fetch(
-    new Request(`http://localhost${pathname}`, { headers: { accept: "text/html", host: "localhost" } }),
-    { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
-    { waitUntil() {}, passThroughOnException() {} },
-  );
+  const originalDatabaseUrl = process.env.DATABASE_URL;
+  process.env.DATABASE_URL = "postgresql://test:test@example.com/flowdesk";
+  try {
+    return await worker.fetch(
+      new Request(`http://localhost${pathname}`, { headers: { accept: "text/html", host: "localhost" } }),
+      { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } },
+      { waitUntil() {}, passThroughOnException() {} },
+    );
+  } finally {
+    if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = originalDatabaseUrl;
+  }
 }
 
 test("renders the localized FlowDesk authentication entry point", async () => {
