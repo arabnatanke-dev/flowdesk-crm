@@ -78,7 +78,7 @@ export function DispatchView({ onOpenCreate }: DispatchViewProps) {
             <div className="schedule-lanes">
               {technicians.map((technician, laneIndex) => (
                 <div className="schedule-lane" key={technician.name}>
-                  {workOrders.filter((order) => order.technician === technician.name).map((order, orderIndex) => (
+                  {workOrders.filter((order) => order.technician?.displayName === technician.name).map((order, orderIndex) => (
                     <article className={`appointment-card slot-${laneIndex}-${orderIndex}`} key={order.id} tabIndex={0}>
                       <span>{order.appointment}</span><strong>{order.number}</strong><p>{localizeText(order.title, locale)}</p><small>{order.client}</small>
                     </article>

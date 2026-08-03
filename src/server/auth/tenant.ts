@@ -21,7 +21,7 @@ export type TenantContext = {
   role: MembershipRole;
 };
 
-async function findTenantContext(orgSlug: string, session: SessionIdentity): Promise<TenantContext | null> {
+export async function resolveTenantMembership(orgSlug: string, session: SessionIdentity): Promise<TenantContext | null> {
   // EN: Query an active membership using both the authenticated user and requested organization slug.
   // RU: Ищет активное членство одновременно по пользователю сессии и запрошенному slug организации.
   const [membership] = await getDb()
@@ -54,7 +54,7 @@ export async function resolveTenantContext(orgSlug: string): Promise<TenantConte
   // EN: Prove the session user has an active membership in the requested active organization.
   // RU: Подтверждает активное членство пользователя сессии в запрошенной активной организации.
   const session = await getSessionIdentity();
-  return session ? findTenantContext(orgSlug, session) : null;
+  return session ? resolveTenantMembership(orgSlug, session) : null;
 }
 
 export async function requireTenantPageContext(orgSlug: string, returnTo = `/app/${orgSlug}/dashboard`): Promise<TenantContext> {
@@ -62,7 +62,7 @@ export async function requireTenantPageContext(orgSlug: string, returnTo = `/app
   // RU: Перенаправляет анонимных посетителей и скрывает организации от посторонних на защищённых страницах.
   const session = await getSessionIdentity();
   if (!session) redirect(`/?returnTo=${encodeURIComponent(returnTo)}`);
-  const context = await findTenantContext(orgSlug, session);
+  const context = await resolveTenantMembership(orgSlug, session);
   if (!context) notFound();
   return context;
 }
@@ -72,7 +72,7 @@ export async function requireTenantApiContext(orgSlug: string): Promise<TenantCo
   // RU: Возвращает явные API-ошибки, не раскрывая существование чужой организации.
   const session = await getSessionIdentity();
   if (!session) throw new ApiError(401, "AUTH_REQUIRED", "Authentication is required.");
-  const context = await findTenantContext(orgSlug, session);
+  const context = await resolveTenantMembership(orgSlug, session);
   if (!context) throw new ApiError(404, "TENANT_NOT_FOUND", "Organization not found.");
   return context;
 }

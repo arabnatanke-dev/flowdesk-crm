@@ -121,7 +121,7 @@ export function DashboardView({ orgSlug, onOpenCreate }: DashboardViewProps) {
                 <div className={`timeline-line ${index === 0 ? "is-live" : ""}`}><span /></div>
                 <div className="timeline-content">
                   <strong>{localizeText(order.title, locale)}</strong>
-                  <span>{order.technician}</span>
+                  <span>{order.technician?.displayName}</span>
                   <small>{localizeText(order.address, locale)}</small>
                 </div>
                 {index === 0 && <span className="live-pill">LIVE</span>}
