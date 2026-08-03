@@ -72,6 +72,7 @@ export const users = pgTable("users", {
   email: varchar("email", { length: 320 }).notNull().unique(),
   displayName: text("display_name").notNull(),
   passwordHash: text("password_hash").notNull(),
+  mustChangePassword: boolean("must_change_password").notNull().default(false),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -89,6 +90,44 @@ export const memberships = pgTable(
   (table) => [
     primaryKey({ columns: [table.organizationId, table.userId] }),
     index("memberships_user_idx").on(table.userId),
+  ],
+);
+
+export const technicianProfiles = pgTable(
+  "technician_profiles",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    displayName: text("display_name").notNull(),
+    phone: varchar("phone", { length: 40 }),
+    specialization: varchar("specialization", { length: 160 }),
+    skills: jsonb("skills").$type<string[]>().notNull().default([]),
+    avatarUrl: text("avatar_url"),
+    notes: text("notes"),
+    isAvailable: boolean("is_available").notNull().default(true),
+    deactivatedAt: timestamp("deactivated_at", { withTimezone: true }),
+    deactivatedBy: uuid("deactivated_by"),
+    deactivationReason: text("deactivation_reason"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.organizationId, table.userId] }),
+    index("technician_profiles_user_idx").on(table.userId),
+    index("technician_profiles_org_available_idx").on(table.organizationId, table.isAvailable),
+    index("technician_profiles_org_specialization_idx").on(table.organizationId, table.specialization),
+    check("technician_profiles_display_name_check", sql`length(btrim(${table.displayName})) between 1 and 120`),
+    check("technician_profiles_skills_check", sql`jsonb_typeof(${table.skills}) = 'array'`),
+    foreignKey({
+      columns: [table.organizationId, table.userId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "technician_profiles_membership_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.organizationId, table.deactivatedBy],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+      name: "technician_profiles_deactivated_by_membership_fk",
+    }),
   ],
 );
 
