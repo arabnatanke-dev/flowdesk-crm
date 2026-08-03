@@ -11,7 +11,7 @@ Interactive foundation for the multi-tenant field-service CRM described in the F
 - Mobile technician route with work-order status transitions.
 - Responsive office and mobile layouts.
 - Strict TypeScript, ESLint, production build, and rendered HTML tests.
-- Private Sites deployment configuration in `.openai/hosting.json`.
+- Sites deployment configuration in `.openai/hosting.json`.
 - English and Russian comments for named functions.
 
 ## Маршруты / Routes
