@@ -1,6 +1,7 @@
 /** Cloudflare Worker entry point for the vinext-starter template. */
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
+import { applySecurityHeaders, type SecurityEnvironment } from "../src/server/http/security-headers";
 
 interface Env {
   ASSETS: Fetcher;
@@ -26,9 +27,8 @@ interface ExecutionContext {
 
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    // EN: Serve the app and attach security headers even when the host bypasses Next configuration.
-    // RU: Отдаёт приложение и добавляет security headers, даже если хост обходит конфигурацию Next.
     const url = new URL(request.url);
+    const environment: SecurityEnvironment = process.env.NODE_ENV === "development" ? "development" : "production";
 
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
@@ -39,25 +39,16 @@ const worker = {
           return result.response();
         },
       }, allowedWidths);
-      return applySecurityHeaders(imageResponse, url.pathname);
+      return applyWorkerHeaders(imageResponse, url, environment);
     }
 
-    return applySecurityHeaders(await handler.fetch(request, env, ctx), url.pathname);
+    return applyWorkerHeaders(await handler.fetch(request, env, ctx), url, environment);
   },
 };
 
-function applySecurityHeaders(response: Response, pathname: string): Response {
-  // EN: Add defense-in-depth headers while preserving the rendered body and status.
-  // RU: Добавляет defense-in-depth headers, сохраняя тело и статус исходного ответа.
-  const hardened = new Response(response.body, response);
-  hardened.headers.set("Content-Security-Policy", "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: https:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; object-src 'none'; upgrade-insecure-requests");
-  hardened.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  hardened.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(self)");
-  hardened.headers.set("X-Content-Type-Options", "nosniff");
-  hardened.headers.set("X-Frame-Options", "DENY");
-  hardened.headers.set("Cross-Origin-Opener-Policy", "same-origin");
-  hardened.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
-  if (pathname.startsWith("/api/") || pathname.startsWith("/app/") || pathname.startsWith("/m/")) {
+function applyWorkerHeaders(response: Response, url: URL, environment: SecurityEnvironment): Response {
+  const hardened = applySecurityHeaders(response, { environment, requestUrl: url });
+  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/app/") || url.pathname.startsWith("/m/")) {
     hardened.headers.set("Cache-Control", "private, no-store");
   }
   return hardened;
