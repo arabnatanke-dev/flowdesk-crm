@@ -39,7 +39,6 @@ FlowDesk CRM is a bilingual field-service operations workspace for managing cust
 - Tailwind CSS and product-specific responsive styling.
 - Drizzle ORM foundation for future persistence.
 - Cloudflare Workers-compatible production output.
-- Sites deployment configuration in `.openai/hosting.json`.
 
 ## Local Development
 
