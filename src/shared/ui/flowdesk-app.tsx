@@ -15,14 +15,15 @@ type FlowDeskAppProps = {
   section: OfficeSection;
   initialWorkOrders: WorkOrder[];
   initialTechnicians: TechnicianOption[];
+  nowIso: string;
 };
 
-export function FlowDeskApp({ orgSlug, organizationName, displayName, role, initialSettings, section, initialWorkOrders, initialTechnicians }: FlowDeskAppProps) {
+export function FlowDeskApp({ orgSlug, organizationName, displayName, role, initialSettings, section, initialWorkOrders, initialTechnicians, nowIso }: FlowDeskAppProps) {
   // EN: Install application-level module providers around the requested office section.
   // RU: Подключает прикладные провайдеры модулей вокруг выбранного office-раздела.
   return (
     <WorkOrderProvider orgSlug={orgSlug} initialWorkOrders={initialWorkOrders} initialTechnicians={initialTechnicians}>
-      <FlowDeskShell orgSlug={orgSlug} organizationName={organizationName} displayName={displayName} role={role} initialSettings={initialSettings} section={section} />
+      <FlowDeskShell orgSlug={orgSlug} organizationName={organizationName} displayName={displayName} role={role} initialSettings={initialSettings} section={section} nowIso={nowIso} />
     </WorkOrderProvider>
   );
 }

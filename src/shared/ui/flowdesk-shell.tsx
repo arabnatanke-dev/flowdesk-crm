@@ -44,9 +44,10 @@ type FlowDeskShellProps = {
   role: MembershipRole;
   initialSettings: OrganizationSettings;
   section: OfficeSection;
+  nowIso: string;
 };
 
-export function FlowDeskShell({ orgSlug, organizationName, displayName, role, initialSettings, section }: FlowDeskShellProps) {
+export function FlowDeskShell({ orgSlug, organizationName, displayName, role, initialSettings, section, nowIso }: FlowDeskShellProps) {
   // EN: Compose the role-aware office shell around independently bounded module views.
   // RU: Собирает роль-ориентированную office-оболочку вокруг независимых модулей.
   const { locale, messages: t } = useLocale();
@@ -174,7 +175,7 @@ export function FlowDeskShell({ orgSlug, organizationName, displayName, role, in
         </header>
 
         <main id="main-content" className="app-content">
-          <CurrentSection orgSlug={orgSlug} initialSettings={initialSettings} section={section} onOpenCreate={openCreateDrawer} />
+          <CurrentSection orgSlug={orgSlug} displayName={displayName} initialSettings={initialSettings} section={section} nowIso={nowIso} onOpenCreate={openCreateDrawer} />
         </main>
       </div>
 
@@ -200,7 +201,7 @@ export function FlowDeskShell({ orgSlug, organizationName, displayName, role, in
   );
 }
 
-function CurrentSection({ orgSlug, initialSettings, section, onOpenCreate }: { orgSlug: string; initialSettings: OrganizationSettings; section: OfficeSection; onOpenCreate: () => void }) {
+function CurrentSection({ orgSlug, displayName, initialSettings, section, nowIso, onOpenCreate }: { orgSlug: string; displayName: string; initialSettings: OrganizationSettings; section: OfficeSection; nowIso: string; onOpenCreate: () => void }) {
   // EN: Route the office shell to one bounded presentation module.
   // RU: Направляет office-оболочку к одному ограниченному presentation-модулю.
   switch (section) {
@@ -212,7 +213,7 @@ function CurrentSection({ orgSlug, initialSettings, section, onOpenCreate }: { o
     case "finance": return <FinanceView />;
     case "reports": return <ReportsView />;
     case "settings": return <SettingsView orgSlug={orgSlug} initialSettings={initialSettings} />;
-    default: return <DashboardView orgSlug={orgSlug} onOpenCreate={onOpenCreate} />;
+    default: return <DashboardView orgSlug={orgSlug} displayName={displayName} timezone={initialSettings.timezone} nowIso={nowIso} onOpenCreate={onOpenCreate} />;
   }
 }
 

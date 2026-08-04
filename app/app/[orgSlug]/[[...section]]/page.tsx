@@ -58,6 +58,7 @@ export default async function OfficePage({ params }: { params: Promise<{ orgSlug
         section={activeSection}
         initialWorkOrders={initialWorkOrders}
         initialTechnicians={initialTechnicians}
+        nowIso={new Date().toISOString()}
       />
     );
   });

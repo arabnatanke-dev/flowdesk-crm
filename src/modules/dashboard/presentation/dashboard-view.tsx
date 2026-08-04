@@ -22,14 +22,59 @@ import { localizeText } from "@/src/modules/work-orders/domain/work-order";
 
 type DashboardViewProps = {
   orgSlug: string;
+  displayName: string;
+  timezone: string;
+  nowIso: string;
   onOpenCreate: () => void;
 };
 
-export function DashboardView({ orgSlug, onOpenCreate }: DashboardViewProps) {
+export function DashboardView({ orgSlug, displayName, timezone, nowIso, onOpenCreate }: DashboardViewProps) {
   // EN: Build a role-oriented operational dashboard from the current work-order snapshot.
   // RU: Формирует роль-ориентированный дашборд из текущего снимка заявок.
   const { locale, messages: t } = useLocale();
   const { workOrders } = useWorkOrders();
+
+  const referenceDate = new Date(nowIso);
+  const firstName = displayName.trim().split(/\s+/)[0] || displayName;
+  const localHour = Number(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: timezone,
+      hour: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(referenceDate)
+      .find((part) => part.type === "hour")?.value ?? "0",
+  );
+
+  const greeting = locale === "ru"
+    ? localHour < 5
+      ? "Доброй ночи"
+      : localHour < 12
+        ? "Доброе утро"
+        : localHour < 18
+          ? "Добрый день"
+          : localHour < 23
+            ? "Добрый вечер"
+            : "Доброй ночи"
+    : localHour < 5
+      ? "Good night"
+      : localHour < 12
+        ? "Good morning"
+        : localHour < 18
+          ? "Good afternoon"
+          : localHour < 23
+            ? "Good evening"
+            : "Good night";
+
+  const dateLabel = new Intl.DateTimeFormat(
+    locale === "ru" ? "ru-RU" : "en-US",
+    {
+      timeZone: timezone,
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    },
+  ).format(referenceDate).replace(/\.$/, "");
 
   const newCount = workOrders.filter((order) => order.status === "NEW").length;
   const unassignedCount = workOrders.filter((order) => !order.technician && order.status !== "CLOSED").length;
@@ -54,9 +99,13 @@ export function DashboardView({ orgSlug, onOpenCreate }: DashboardViewProps) {
     <div className="view-stack">
       <header className="page-heading dashboard-heading">
         <div>
-          <span className="eyebrow">{t.today} · ASIA/DUBAI</span>
-          <h1>{t.welcome}</h1>
-          <p>{t.dashboardSubtitle}</p>
+          <span className="eyebrow">{t.today} · {timezone.toUpperCase()}</span>
+          <h1>{greeting}, {firstName}</h1>
+          <p>
+            {locale === "ru"
+              ? `Вот что требует внимания сегодня, ${dateLabel}.`
+              : `Here is what needs your attention today, ${dateLabel}.`}
+          </p>
         </div>
         <div className="page-actions">
           <button className="secondary-button" type="button" disabled><UserPlus size={17} />{t.newClient}</button>
