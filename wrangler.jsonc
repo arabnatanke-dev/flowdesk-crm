@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "flowdesk-crm-staging",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-08-04",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": true,
+  "vars": {
+    "TRUSTED_PROXY_HEADER": "cf-connecting-ip"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

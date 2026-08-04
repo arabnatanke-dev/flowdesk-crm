@@ -1,4 +1,4 @@
-const PASSWORD_ITERATIONS = 600_000;
+const PASSWORD_ITERATIONS = 100_000;
 const PASSWORD_KEY_BYTES = 32;
 const SALT_BYTES = 16;
 
@@ -58,7 +58,7 @@ export async function verifyPassword(password: string, encodedHash: string): Pro
   // RU: Проверяет введённый пароль по сохранённой версионированной PBKDF2-записи.
   const [algorithm, iterationText, encodedSalt, encodedKey] = encodedHash.split("$");
   const iterations = Number(iterationText);
-  if (algorithm !== "pbkdf2-sha256" || !Number.isSafeInteger(iterations) || iterations < 100_000 || !encodedSalt || !encodedKey) {
+  if (algorithm !== "pbkdf2-sha256" || !Number.isSafeInteger(iterations) || iterations < 100_000 || iterations > PASSWORD_ITERATIONS || !encodedSalt || !encodedKey) {
     return false;
   }
   const actualKey = await derivePasswordKey(password, decodeBase64Url(encodedSalt), iterations);
