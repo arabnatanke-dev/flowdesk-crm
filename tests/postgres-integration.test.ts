@@ -15,6 +15,7 @@ import { requireSessionToken, resolveSessionToken } from "../src/server/auth/ses
 import { assertLoginAllowed, recordLoginFailure } from "../src/server/auth/rate-limit";
 import { sha256Hex } from "../src/server/security/crypto";
 import { ApiError } from "../src/server/http/api";
+import { updateCurrentUserProfile } from "../src/server/profile/service";
 import {
   assignWorkOrder,
   createWorkOrder,
@@ -294,4 +295,50 @@ test("stale update fails and successful mutation commits its audit record", asyn
     eq(auditLogs.action, "work_order.status_changed"),
   )).limit(1);
   assert.equal(audit.after && (audit.after as { version?: number }).version, 2);
+});
+
+
+test("member updates own display name and writes tenant audit", async () => {
+  const ownerContext = tenantContext(ids.owner, "OWNER");
+
+  const profile = await updateCurrentUserProfile(
+    serviceDatabase,
+    ownerContext,
+    { displayName: "  Abdulla   Chukhray  " },
+    "profile-ip",
+  );
+
+  assert.deepEqual(profile, {
+    displayName: "Abdulla Chukhray",
+  });
+
+  const [updatedUser] = await database
+    .select({
+      displayName: users.displayName,
+    })
+    .from(users)
+    .where(eq(users.id, ids.owner))
+    .limit(1);
+
+  assert.equal(updatedUser.displayName, "Abdulla Chukhray");
+
+  const [audit] = await database
+    .select()
+    .from(auditLogs)
+    .where(and(
+      eq(auditLogs.organizationId, ids.organizationA),
+      eq(auditLogs.entityId, ids.owner),
+      eq(auditLogs.action, "user.profile_updated"),
+    ))
+    .limit(1);
+
+  assert.equal(
+    audit.before && (audit.before as { displayName?: string }).displayName,
+    "Owner",
+  );
+  assert.equal(
+    audit.after && (audit.after as { displayName?: string }).displayName,
+    "Abdulla Chukhray",
+  );
+  assert.equal(audit.ipHash, "profile-ip");
 });

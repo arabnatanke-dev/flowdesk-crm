@@ -26,6 +26,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { useLocale } from "@/src/shared/i18n/locale-context";
 import type { OrganizationSettings } from "@/src/server/settings/service";
 
@@ -170,14 +171,60 @@ export function ReportsView() {
   );
 }
 
-export function SettingsView({ orgSlug, initialSettings }: { orgSlug: string; initialSettings: OrganizationSettings }) {
-  // EN: Edit tenant-level locale, timezone, currency and tax defaults in one bounded form.
-  // RU: Редактирует locale, timezone, currency и налоговые defaults tenant в одной форме.
+export function SettingsView({ orgSlug, displayName, initialSettings }: { orgSlug: string; displayName: string; initialSettings: OrganizationSettings }) {
+  // EN: Edit the current user profile and tenant-level defaults in bounded forms.
+  // RU: Редактирует профиль текущего пользователя и tenant-настройки в отдельных формах.
   const { locale, setLocale, messages: t } = useLocale();
+  const router = useRouter();
+  const [profileName, setProfileName] = useState(displayName);
+  const [profileSaved, setProfileSaved] = useState(false);
+  const [profilePending, setProfilePending] = useState(false);
+  const [profileError, setProfileError] = useState("");
   const [settings, setSettings] = useState(initialSettings);
   const [saved, setSaved] = useState(false);
   const [pending, setPending] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+
+  async function handleProfileSave(event: FormEvent<HTMLFormElement>) {
+    // EN: Persist the authenticated user's display name and refresh server-derived identity.
+    // RU: Сохраняет имя авторизованного пользователя и обновляет серверные данные личности.
+    event.preventDefault();
+    setProfilePending(true);
+    setProfileError("");
+
+    try {
+      const response = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          orgSlug,
+          displayName: profileName,
+        }),
+      });
+
+      const payload = await response.json() as {
+        profile?: { displayName: string };
+        error?: { message?: string };
+      };
+
+      if (!response.ok || !payload.profile) {
+        throw new Error(payload.error?.message ?? "Profile command failed.");
+      }
+
+      setProfileName(payload.profile.displayName);
+      setProfileSaved(true);
+      router.refresh();
+      window.setTimeout(() => setProfileSaved(false), 2600);
+    } catch (error) {
+      setProfileError(
+        error instanceof Error
+          ? error.message
+          : "Profile command failed.",
+      );
+    } finally {
+      setProfilePending(false);
+    }
+  }
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     // EN: Persist tenant settings and accept the next version only after server confirmation.
@@ -213,7 +260,72 @@ export function SettingsView({ orgSlug, initialSettings }: { orgSlug: string; in
   }
 
   return (
-    <div className="view-stack"><ViewHeading eyebrow={`TENANT SETTINGS · v${settings.version}`} title={t.settingsTitle} subtitle={t.settingsSubtitle} />
+    <div className="view-stack">
+      <ViewHeading eyebrow={`TENANT SETTINGS · v${settings.version}`} title={t.settingsTitle} subtitle={t.settingsSubtitle} />
+
+      <form className="settings-form panel" onSubmit={handleProfileSave}>
+        <div className="panel-heading">
+          <div>
+            <span className="panel-kicker">USER PROFILE</span>
+            <h2>{locale === "ru" ? "Личный профиль" : "Personal profile"}</h2>
+          </div>
+          {profileSaved && (
+            <span className="saved-pill">
+              <CheckCircle2 size={15} />
+              {t.saved}
+            </span>
+          )}
+        </div>
+
+        <div className="form-grid two-columns">
+          <label className="field-label">
+            <span>{locale === "ru" ? "Имя пользователя" : "Display name"}</span>
+            <input
+              name="displayName"
+              value={profileName}
+              onChange={(event) => setProfileName(event.target.value)}
+              minLength={2}
+              maxLength={120}
+              autoComplete="name"
+              required
+            />
+          </label>
+        </div>
+
+        {profileError && (
+          <p className="form-error" role="alert">
+            {profileError}
+          </p>
+        )}
+
+        <div className="settings-note">
+          <ShieldCheck size={19} />
+          <div>
+            <strong>
+              {locale === "ru"
+                ? "Это имя видно внутри CRM"
+                : "This name is visible inside the CRM"}
+            </strong>
+            <p>
+              {locale === "ru"
+                ? "Оно используется в меню, приветствии, команде и журнале действий."
+                : "It is used in navigation, greetings, team records and the audit log."}
+            </p>
+          </div>
+        </div>
+
+        <footer className="form-footer">
+          <span>{locale === "ru" ? "Текущий аккаунт" : "Current account"}</span>
+          <button
+            className="primary-button"
+            type="submit"
+            disabled={profilePending || profileName.trim().length < 2}
+          >
+            {profilePending ? "…" : t.save}
+          </button>
+        </footer>
+      </form>
+
       <form className="settings-layout" onSubmit={handleSave}>
         <nav className="settings-nav panel" aria-label={t.settings}><button type="button" className="is-active" disabled><Building2 size={17} />{locale === "ru" ? "Профиль" : "Profile"}</button><button type="button" disabled><Clock3 size={17} />{locale === "ru" ? "Время и график" : "Time & schedule"}</button><button type="button" disabled><Percent size={17} />{locale === "ru" ? "Налоги" : "Taxes"}</button><button type="button" disabled><Settings2 size={17} />SLA & workflow</button><button type="button" disabled><ShieldCheck size={17} />{locale === "ru" ? "Безопасность" : "Security"}</button></nav>
         <section className="settings-form panel">

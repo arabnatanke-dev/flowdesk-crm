@@ -212,7 +212,7 @@ function CurrentSection({ orgSlug, displayName, initialSettings, section, nowIso
     case "catalog": return <CatalogView />;
     case "finance": return <FinanceView />;
     case "reports": return <ReportsView />;
-    case "settings": return <SettingsView orgSlug={orgSlug} initialSettings={initialSettings} />;
+    case "settings": return <SettingsView orgSlug={orgSlug} displayName={displayName} initialSettings={initialSettings} />;
     default: return <DashboardView orgSlug={orgSlug} displayName={displayName} timezone={initialSettings.timezone} nowIso={nowIso} onOpenCreate={onOpenCreate} />;
   }
 }
