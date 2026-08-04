@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { withRequestDatabase } from "@/db";
 import { requireTenantApiContext } from "@/src/server/auth/tenant";
 import { apiErrorResponse, assertSameOrigin, getClientAddress } from "@/src/server/http/api";
 import { hashPrivateIdentifier } from "@/src/server/security/crypto";
@@ -26,20 +27,23 @@ export async function POST(
   // EN: Persist a versioned service window before status scheduling and dispatch.
   // RU: Сохраняет версионированное сервисное окно до scheduling и dispatch переходов.
   try {
-    assertSameOrigin(request);
-    const { orgSlug, workOrderId } = await params;
-    const context = await requireTenantApiContext(orgSlug);
-    const parsed = scheduleSchema.safeParse(await request.json());
-    if (!parsed.success) return NextResponse.json({ error: { code: "INVALID_SCHEDULE", message: "Check the schedule fields.", details: parsed.error.flatten() } }, { status: 400 });
-    const { expectedVersion, ...input } = parsed.data;
-    return NextResponse.json({
-      workOrder: await scheduleWorkOrder(
-        context,
-        workOrderId,
-        input,
-        expectedVersion,
-        await hashPrivateIdentifier(getClientAddress(request)),
-      ),
+    return await withRequestDatabase(async (database) => {
+      assertSameOrigin(request);
+      const { orgSlug, workOrderId } = await params;
+      const context = await requireTenantApiContext(database, orgSlug);
+      const parsed = scheduleSchema.safeParse(await request.json());
+      if (!parsed.success) return NextResponse.json({ error: { code: "INVALID_SCHEDULE", message: "Check the schedule fields.", details: parsed.error.flatten() } }, { status: 400 });
+      const { expectedVersion, ...input } = parsed.data;
+      return NextResponse.json({
+        workOrder: await scheduleWorkOrder(
+          database,
+          context,
+          workOrderId,
+          input,
+          expectedVersion,
+          await hashPrivateIdentifier(getClientAddress(request)),
+        ),
+      });
     });
   } catch (error) {
     return apiErrorResponse(error);

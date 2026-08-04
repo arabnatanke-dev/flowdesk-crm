@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { withRequestDatabase } from "@/db";
 import { requireTenantApiContext } from "@/src/server/auth/tenant";
 import { apiErrorResponse, assertSameOrigin, getClientAddress } from "@/src/server/http/api";
 import { hashPrivateIdentifier } from "@/src/server/security/crypto";
@@ -21,9 +22,11 @@ export async function GET(
   // EN: Return only work orders belonging to the organization authorized by the current session.
   // RU: Возвращает только заявки организации, разрешённой текущей сессией.
   try {
-    const { orgSlug } = await params;
-    const context = await requireTenantApiContext(orgSlug);
-    return NextResponse.json({ workOrders: await listWorkOrders(context) });
+    return await withRequestDatabase(async (database) => {
+      const { orgSlug } = await params;
+      const context = await requireTenantApiContext(database, orgSlug);
+      return NextResponse.json({ workOrders: await listWorkOrders(database, context) });
+    });
   } catch (error) {
     return apiErrorResponse(error);
   }
@@ -36,13 +39,15 @@ export async function POST(
   // EN: Validate and persist a tenant-scoped work-order creation command.
   // RU: Валидирует и сохраняет tenant-команду создания заявки.
   try {
-    assertSameOrigin(request);
-    const { orgSlug } = await params;
-    const context = await requireTenantApiContext(orgSlug);
-    const parsed = createWorkOrderSchema.safeParse(await request.json());
-    if (!parsed.success) return NextResponse.json({ error: { code: "INVALID_WORK_ORDER", message: "Check the work-order fields.", details: parsed.error.flatten() } }, { status: 400 });
-    const ipHash = await hashPrivateIdentifier(getClientAddress(request));
-    return NextResponse.json({ workOrder: await createWorkOrder(context, parsed.data, ipHash) }, { status: 201 });
+    return await withRequestDatabase(async (database) => {
+      assertSameOrigin(request);
+      const { orgSlug } = await params;
+      const context = await requireTenantApiContext(database, orgSlug);
+      const parsed = createWorkOrderSchema.safeParse(await request.json());
+      if (!parsed.success) return NextResponse.json({ error: { code: "INVALID_WORK_ORDER", message: "Check the work-order fields.", details: parsed.error.flatten() } }, { status: 400 });
+      const ipHash = await hashPrivateIdentifier(getClientAddress(request));
+      return NextResponse.json({ workOrder: await createWorkOrder(database, context, parsed.data, ipHash) }, { status: 201 });
+    });
   } catch (error) {
     return apiErrorResponse(error);
   }

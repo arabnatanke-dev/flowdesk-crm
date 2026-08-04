@@ -6,7 +6,7 @@ import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import { fileURLToPath } from "node:url";
 import * as schema from "../db/schema";
-import { installDatabaseForTests, resetDatabaseForTests } from "../db/index";
+import { installDatabaseForTests, resetDatabaseForTests, type FlowDeskDatabase } from "../db/index";
 import { auditLogs, memberships, organizationSequences, organizations, sessions, users, workOrders } from "../db/schema";
 import type { MembershipRole } from "../src/server/auth/permissions";
 import type { TenantContext } from "../src/server/auth/tenant";
@@ -26,6 +26,7 @@ import {
 
 const client = new PGlite();
 const database = drizzle(client, { schema });
+let serviceDatabase: FlowDeskDatabase;
 const ids = {
   organizationA: crypto.randomUUID(),
   organizationB: crypto.randomUUID(),
@@ -155,7 +156,7 @@ before(async () => {
   // RU: Запускает изолированный PostgreSQL-compatible engine и применяет committed migration chain.
   process.env.SECURITY_PEPPER = "integration-test-pepper-with-at-least-32-characters";
   await migrate(database, { migrationsFolder: fileURLToPath(new URL("../drizzle", import.meta.url)) });
-  installDatabaseForTests(database);
+  serviceDatabase = installDatabaseForTests(database);
   await seedIntegrationDatabase();
 });
 
@@ -168,29 +169,29 @@ after(async () => {
 
 test("owner cannot read another organization through tenant-scoped service queries", async () => {
   const ownerContext = tenantContext(ids.owner, "OWNER");
-  assert.equal(await resolveTenantMembership("beta", ownerContext.session), null);
-  const records = await listWorkOrders(ownerContext);
+  assert.equal(await resolveTenantMembership(serviceDatabase, "beta", ownerContext.session), null);
+  const records = await listWorkOrders(serviceDatabase, ownerContext);
   assert.deepEqual(records.map((record) => record.id).sort(), [ids.assignedWorkOrder, ids.otherTechnicianWorkOrder, ids.unassignedWorkOrder].sort());
   assert.equal(records.some((record) => record.id === ids.foreignWorkOrder), false);
 });
 
 test("technician sees only assigned work orders and receives technician DTO", async () => {
-  const records = await listWorkOrders(tenantContext(ids.technician, "TECHNICIAN"));
+  const records = await listWorkOrders(serviceDatabase, tenantContext(ids.technician, "TECHNICIAN"));
   assert.deepEqual(records.map((record) => record.id), [ids.assignedWorkOrder]);
   assert.deepEqual(records[0].technician, { id: ids.technician, displayName: "Assigned Technician" });
 });
 
 test("viewer cannot read or create operational work orders", async () => {
-  await assert.rejects(() => listWorkOrders(tenantContext(ids.viewer, "VIEWER")), (error: unknown) => error instanceof ApiError && error.code === "READ_FORBIDDEN");
+  await assert.rejects(() => listWorkOrders(serviceDatabase, tenantContext(ids.viewer, "VIEWER")), (error: unknown) => error instanceof ApiError && error.code === "READ_FORBIDDEN");
   await assert.rejects(
-    () => createWorkOrder(tenantContext(ids.viewer, "VIEWER"), { client: "Blocked", phone: "", title: "Blocked", address: "Blocked", priority: "NORMAL", scheduledStart: null }, null),
+    () => createWorkOrder(serviceDatabase, tenantContext(ids.viewer, "VIEWER"), { client: "Blocked", phone: "", title: "Blocked", address: "Blocked", priority: "NORMAL", scheduledStart: null }, null),
     (error: unknown) => error instanceof ApiError && error.code === "ROLE_FORBIDDEN",
   );
 });
 
 test("accountant cannot change operational status", async () => {
   await assert.rejects(
-    () => transitionWorkOrder(tenantContext(ids.accountant, "ACCOUNTANT"), ids.assignedWorkOrder, "WORK_COMPLETED", 1, null),
+    () => transitionWorkOrder(serviceDatabase, tenantContext(ids.accountant, "ACCOUNTANT"), ids.assignedWorkOrder, "WORK_COMPLETED", 1, null),
     (error: unknown) => error instanceof ApiError && error.code === "ROLE_FORBIDDEN",
   );
 });
@@ -202,15 +203,15 @@ test("expired and revoked sessions both resolve as unauthenticated", async () =>
     userId: ids.owner,
     expiresAt: new Date(Date.now() - 1_000),
   });
-  assert.equal(await resolveSessionToken(expiredToken, false), null);
-  await assert.rejects(() => requireSessionToken(expiredToken), (error: unknown) => error instanceof ApiError && error.status === 401);
+  assert.equal(await resolveSessionToken(serviceDatabase, expiredToken, false), null);
+  await assert.rejects(() => requireSessionToken(serviceDatabase, expiredToken), (error: unknown) => error instanceof ApiError && error.status === 401);
 
   const revokedToken = "revoked-integration-token";
   const revokedHash = await sha256Hex(revokedToken);
   await database.insert(sessions).values({ tokenHash: revokedHash, userId: ids.owner, expiresAt: new Date(Date.now() + 60_000) });
   await database.delete(sessions).where(eq(sessions.tokenHash, revokedHash));
-  assert.equal(await resolveSessionToken(revokedToken, false), null);
-  await assert.rejects(() => requireSessionToken(revokedToken), (error: unknown) => error instanceof ApiError && error.status === 401);
+  assert.equal(await resolveSessionToken(serviceDatabase, revokedToken, false), null);
+  await assert.rejects(() => requireSessionToken(serviceDatabase, revokedToken), (error: unknown) => error instanceof ApiError && error.status === 401);
 });
 
 test("idle sessions expire and parallel rotation accepts the previous token only during grace", async () => {
@@ -221,7 +222,7 @@ test("idle sessions expire and parallel rotation accepts the previous token only
     expiresAt: new Date(Date.now() + 60_000),
     lastSeenAt: new Date(Date.now() - 31 * 60 * 1000),
   });
-  await assert.rejects(() => requireSessionToken(idleToken), (error: unknown) => error instanceof ApiError && error.status === 401);
+  await assert.rejects(() => requireSessionToken(serviceDatabase, idleToken), (error: unknown) => error instanceof ApiError && error.status === 401);
 
   const oldToken = "rotation-integration-token";
   await database.insert(sessions).values({
@@ -231,60 +232,60 @@ test("idle sessions expire and parallel rotation accepts the previous token only
     rotatedAt: new Date(Date.now() - 16 * 60 * 1000),
   });
   const parallelResults = await Promise.all([
-    resolveSessionToken(oldToken, true),
-    resolveSessionToken(oldToken, true),
+    resolveSessionToken(serviceDatabase, oldToken, true),
+    resolveSessionToken(serviceDatabase, oldToken, true),
   ]);
   assert.equal(parallelResults.every((result) => result?.identity.userId === ids.owner), true);
   const rotatedTokens = parallelResults.flatMap((result) => result?.rotatedToken ? [result.rotatedToken] : []);
   assert.equal(rotatedTokens.length, 1);
 
-  const graceResult = await resolveSessionToken(oldToken, true);
+  const graceResult = await resolveSessionToken(serviceDatabase, oldToken, true);
   assert.equal(graceResult?.identity.userId, ids.owner);
   assert.equal(graceResult?.rotatedToken, null);
-  assert.equal((await requireSessionToken(rotatedTokens[0])).userId, ids.owner);
+  assert.equal((await requireSessionToken(serviceDatabase, rotatedTokens[0])).userId, ids.owner);
 
   await database.update(sessions).set({ previousTokenValidUntil: new Date(Date.now() - 1_000) })
     .where(eq(sessions.tokenHash, await sha256Hex(rotatedTokens[0])));
-  assert.equal(await resolveSessionToken(oldToken, false), null);
-  assert.equal((await requireSessionToken(rotatedTokens[0])).userId, ids.owner);
+  assert.equal(await resolveSessionToken(serviceDatabase, oldToken, false), null);
+  assert.equal((await requireSessionToken(serviceDatabase, rotatedTokens[0])).userId, ids.owner);
 });
 
 test("parallel login failures atomically block the account bucket", async () => {
   const request = new Request("https://flowdesk.example/api/auth/login", { headers: { "cf-connecting-ip": "203.0.113.40" } });
-  await Promise.all(Array.from({ length: 5 }, () => recordLoginFailure("parallel@example.com", request)));
+  await Promise.all(Array.from({ length: 5 }, () => recordLoginFailure(serviceDatabase, "parallel@example.com", request)));
   await assert.rejects(
-    () => assertLoginAllowed("parallel@example.com", request),
+    () => assertLoginAllowed(serviceDatabase, "parallel@example.com", request),
     (error: unknown) => error instanceof ApiError && error.code === "LOGIN_RATE_LIMITED",
   );
 });
 
 test("schedule, assignment and content commands complete the pre-dispatch workflow", async () => {
   const ownerContext = tenantContext(ids.owner, "OWNER");
-  const scheduled = await scheduleWorkOrder(ownerContext, ids.unassignedWorkOrder, {
+  const scheduled = await scheduleWorkOrder(serviceDatabase, ownerContext, ids.unassignedWorkOrder, {
     scheduledStart: new Date(Date.now() + 3_600_000).toISOString(),
     scheduledEnd: new Date(Date.now() + 7_200_000).toISOString(),
     timezone: "Asia/Dubai",
   }, 1, null);
-  const assigned = await assignWorkOrder(ownerContext, scheduled.id, ids.technician, scheduled.version, null);
-  const edited = await updateWorkOrder(ownerContext, assigned.id, {
+  const assigned = await assignWorkOrder(serviceDatabase, ownerContext, scheduled.id, ids.technician, scheduled.version, null);
+  const edited = await updateWorkOrder(serviceDatabase, ownerContext, assigned.id, {
     client: "Updated Client",
     phone: "+971500000099",
     title: "Updated job",
     address: "Updated address",
     priority: "HIGH",
   }, assigned.version, null);
-  const moved = await transitionWorkOrder(ownerContext, edited.id, "SCHEDULED", edited.version, null);
-  const dispatched = await transitionWorkOrder(ownerContext, moved.id, "DISPATCHED", moved.version, null);
+  const moved = await transitionWorkOrder(serviceDatabase, ownerContext, edited.id, "SCHEDULED", edited.version, null);
+  const dispatched = await transitionWorkOrder(serviceDatabase, ownerContext, moved.id, "DISPATCHED", moved.version, null);
   assert.equal(dispatched.status, "DISPATCHED");
   assert.equal(dispatched.technician?.id, ids.technician);
 });
 
 test("stale update fails and successful mutation commits its audit record", async () => {
   const ownerContext = tenantContext(ids.owner, "OWNER");
-  const updated = await transitionWorkOrder(ownerContext, ids.assignedWorkOrder, "WORK_COMPLETED", 1, "audit-ip");
+  const updated = await transitionWorkOrder(serviceDatabase, ownerContext, ids.assignedWorkOrder, "WORK_COMPLETED", 1, "audit-ip");
   assert.equal(updated.version, 2);
   await assert.rejects(
-    () => transitionWorkOrder(ownerContext, ids.assignedWorkOrder, "PAUSED", 1, null),
+    () => transitionWorkOrder(serviceDatabase, ownerContext, ids.assignedWorkOrder, "PAUSED", 1, null),
     (error: unknown) => error instanceof ApiError && error.code === "VERSION_CONFLICT",
   );
   const [audit] = await database.select().from(auditLogs).where(and(

@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { and, eq, sql } from "drizzle-orm";
-import { getDb } from "../db/index";
+import { withRequestDatabase } from "../db/index";
 import { memberships, organizations, organizationSequences, users, workOrders } from "../db/schema";
 import { hashPassword } from "../src/server/security/crypto";
 import { demoEnvironmentSchema } from "./environment";
@@ -9,27 +9,27 @@ async function seedDemo(): Promise<void> {
   // EN: Add non-destructive demo technician and work-order fixtures after bootstrap provisioning.
   // RU: Добавляет неразрушающие demo-данные техника и заявок после bootstrap provisioning.
   const environment = demoEnvironmentSchema.parse(process.env);
-  const db = getDb();
-  const [organization] = await db.select().from(organizations).where(eq(organizations.slug, environment.SEED_ORG_SLUG)).limit(1);
-  const [owner] = await db.select().from(users).where(eq(users.email, environment.SEED_ADMIN_EMAIL)).limit(1);
+  await withRequestDatabase(async (database) => {
+  const [organization] = await database.select().from(organizations).where(eq(organizations.slug, environment.SEED_ORG_SLUG)).limit(1);
+  const [owner] = await database.select().from(users).where(eq(users.email, environment.SEED_ADMIN_EMAIL)).limit(1);
   if (!organization || !owner) throw new Error("Run npm run db:bootstrap before db:seed-demo.");
 
-  let [technician] = await db.select().from(users).where(eq(users.email, environment.DEMO_TECHNICIAN_EMAIL)).limit(1);
+  let [technician] = await database.select().from(users).where(eq(users.email, environment.DEMO_TECHNICIAN_EMAIL)).limit(1);
   if (!technician) {
-    [technician] = await db.insert(users).values({
+    [technician] = await database.insert(users).values({
       email: environment.DEMO_TECHNICIAN_EMAIL,
       displayName: environment.DEMO_TECHNICIAN_NAME,
       passwordHash: await hashPassword(environment.DEMO_TECHNICIAN_PASSWORD),
     }).returning();
   }
-  await db.insert(memberships).values({ organizationId: organization.id, userId: technician.id, role: "TECHNICIAN" }).onConflictDoNothing();
-  await db.insert(organizationSequences).values({ organizationId: organization.id, nextWorkOrderNumber: 1049 }).onConflictDoUpdate({
+  await database.insert(memberships).values({ organizationId: organization.id, userId: technician.id, role: "TECHNICIAN" }).onConflictDoNothing();
+  await database.insert(organizationSequences).values({ organizationId: organization.id, nextWorkOrderNumber: 1049 }).onConflictDoUpdate({
     target: organizationSequences.organizationId,
     set: { nextWorkOrderNumber: sql`greatest(${organizationSequences.nextWorkOrderNumber}, 1049)`, updatedAt: new Date() },
   });
 
   const now = Date.now();
-  await db.insert(workOrders).values([
+  await database.insert(workOrders).values([
     {
       organizationId: organization.id,
       number: 1048,
@@ -86,7 +86,7 @@ async function seedDemo(): Promise<void> {
     },
   ]).onConflictDoNothing({ target: [workOrders.organizationId, workOrders.number] });
 
-  const [membership] = await db.select().from(memberships).where(and(
+  const [membership] = await database.select().from(memberships).where(and(
     eq(memberships.organizationId, organization.id),
     eq(memberships.userId, technician.id),
   )).limit(1);
@@ -94,6 +94,7 @@ async function seedDemo(): Promise<void> {
     throw new Error("Demo user already has a conflicting or inactive membership; resolve it explicitly.");
   }
   console.info(`Demo seed complete for ${organization.slug}; technician: ${technician.email}`);
+  });
 }
 
 seedDemo().catch((error: unknown) => {

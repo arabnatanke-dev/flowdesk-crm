@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { withRequestDatabase } from "@/db";
 import { requireTenantApiContext } from "@/src/server/auth/tenant";
 import { apiErrorResponse, assertSameOrigin, getClientAddress } from "@/src/server/http/api";
 import { hashPrivateIdentifier } from "@/src/server/security/crypto";
@@ -28,13 +29,15 @@ export async function PUT(
   // EN: Validate and persist a version-checked organization-settings command.
   // RU: Валидирует и сохраняет version-проверенную команду настроек организации.
   try {
-    assertSameOrigin(request);
-    const { orgSlug } = await params;
-    const context = await requireTenantApiContext(orgSlug);
-    const parsed = settingsSchema.safeParse(await request.json());
-    if (!parsed.success) return NextResponse.json({ error: { code: "INVALID_SETTINGS", message: "Check the settings fields.", details: parsed.error.flatten() } }, { status: 400 });
-    const ipHash = await hashPrivateIdentifier(getClientAddress(request));
-    return NextResponse.json({ settings: await updateOrganizationSettings(context, parsed.data, ipHash) });
+    return await withRequestDatabase(async (database) => {
+      assertSameOrigin(request);
+      const { orgSlug } = await params;
+      const context = await requireTenantApiContext(database, orgSlug);
+      const parsed = settingsSchema.safeParse(await request.json());
+      if (!parsed.success) return NextResponse.json({ error: { code: "INVALID_SETTINGS", message: "Check the settings fields.", details: parsed.error.flatten() } }, { status: 400 });
+      const ipHash = await hashPrivateIdentifier(getClientAddress(request));
+      return NextResponse.json({ settings: await updateOrganizationSettings(database, context, parsed.data, ipHash) });
+    });
   } catch (error) {
     return apiErrorResponse(error);
   }

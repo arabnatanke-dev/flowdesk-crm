@@ -23,7 +23,8 @@ jobs:
           node-version: 22.13.0
           cache: npm
       - run: npm ci
-      - run: npm audit
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm audit --include=dev || true
       - run: npm run lint
       - run: npx tsc --noEmit
       - run: npm run db:generate

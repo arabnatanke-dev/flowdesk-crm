@@ -43,6 +43,13 @@
       "when": 1785771605499,
       "tag": "0005_bored_dakota_north",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785787497532,
+      "tag": "0006_fearless_robbie_robertson",
+      "breakpoints": true
     }
   ]
 }

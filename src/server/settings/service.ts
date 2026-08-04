@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { getDb } from "@/db";
+import type { FlowDeskDatabase } from "@/db";
 import { auditLogs, organizations } from "@/db/schema";
 import { canUpdateSettings } from "@/src/server/auth/permissions";
 import type { TenantContext } from "@/src/server/auth/tenant";
@@ -17,6 +17,7 @@ export type OrganizationSettings = {
 export type UpdateOrganizationSettings = Omit<OrganizationSettings, "version"> & { expectedVersion: number };
 
 export async function updateOrganizationSettings(
+  database: FlowDeskDatabase,
   context: TenantContext,
   input: UpdateOrganizationSettings,
   ipHash: string | null,
@@ -24,7 +25,7 @@ export async function updateOrganizationSettings(
   // EN: Persist authorized tenant defaults with optimistic concurrency and a complete audit snapshot.
   // RU: Сохраняет разрешённые tenant-настройки с optimistic concurrency и полным audit-снимком.
   if (!canUpdateSettings(context.role)) throw new ApiError(403, "ROLE_FORBIDDEN", "Your role cannot update organization settings.");
-  return getDb().transaction(async (transaction) => {
+  return database.transaction(async (transaction) => {
     // EN: Commit the settings version and its audit snapshot together.
     // RU: Фиксирует версию настроек и её audit-снимок в одной транзакции.
     const [updated] = await transaction.update(organizations).set({

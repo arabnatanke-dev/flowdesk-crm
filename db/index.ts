@@ -2,37 +2,47 @@ import { Pool } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-serverless";
 import * as schema from "./schema";
 
-let database: ReturnType<typeof createDatabase> | null = null;
+function createDrizzleClient(pool: Pool) {
+  // EN: Bind one Neon WebSocket pool to a typed Drizzle client for a single lifecycle.
+  // RU: Связывает один Neon WebSocket pool с типизированным Drizzle-клиентом для одного lifecycle.
+  return drizzle(pool, { schema });
+}
 
-function createDatabase() {
-  // EN: Build a stateless Neon HTTP client suitable for Node and edge-style runtimes.
-  // RU: Создаёт stateless Neon HTTP-клиент для Node и edge-подобных окружений.
+export type FlowDeskDatabase = ReturnType<typeof createDrizzleClient>;
+
+let databaseForTests: FlowDeskDatabase | null = null;
+
+export async function withRequestDatabase<T>(
+  operation: (database: FlowDeskDatabase) => Promise<T>,
+): Promise<T> {
+  // EN: Create and close one Neon pool around all database work performed by one request or command.
+  // RU: Создаёт и закрывает один Neon pool вокруг всей работы с БД одного запроса или команды.
+  if (databaseForTests) return operation(databaseForTests);
+
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
     throw new Error("DATABASE_URL is required. Copy .env.example to .env.local and configure PostgreSQL/Neon.");
   }
-  return drizzle(new Pool({ connectionString: databaseUrl }), { schema });
+
+  const pool = new Pool({ connectionString: databaseUrl });
+  try {
+    return await operation(createDrizzleClient(pool));
+  } finally {
+    await pool.end();
+  }
 }
 
-export function getDb() {
-  // EN: Reuse the configured Drizzle client within one server runtime instance.
-  // RU: Переиспользует настроенный Drizzle-клиент внутри одного server runtime.
-  database ??= createDatabase();
-  return database;
-}
-
-export type FlowDeskDatabase = ReturnType<typeof getDb>;
-
-export function installDatabaseForTests(testDatabase: unknown): void {
-  // EN: Replace the singleton only in tests so services can run against an isolated PostgreSQL engine.
-  // RU: Заменяет singleton только в тестах для запуска сервисов на изолированном PostgreSQL engine.
+export function installDatabaseForTests(testDatabase: unknown): FlowDeskDatabase {
+  // EN: Install a suite-owned database without making production connections global or closing PGlite per call.
+  // RU: Устанавливает БД набора тестов без глобальных production-соединений и закрытия PGlite после каждого вызова.
   if (process.env.NODE_ENV === "production") throw new Error("Test database injection is disabled in production.");
-  database = testDatabase as ReturnType<typeof createDatabase>;
+  databaseForTests = testDatabase as FlowDeskDatabase;
+  return databaseForTests;
 }
 
 export function resetDatabaseForTests(): void {
-  // EN: Clear the injected database after an isolated integration-test suite.
-  // RU: Очищает внедрённую БД после изолированного набора интеграционных тестов.
+  // EN: Remove only the test override; production request pools are never stored at module scope.
+  // RU: Удаляет только тестовую подмену; production request pools никогда не хранятся на уровне модуля.
   if (process.env.NODE_ENV === "production") throw new Error("Test database reset is disabled in production.");
-  database = null;
+  databaseForTests = null;
 }
